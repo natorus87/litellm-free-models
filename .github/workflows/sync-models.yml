@@ -28,7 +28,7 @@ jobs:
         run: python3 find-shared-models.py --no-pricing
 
       - name: Upload providers-overlap.txt
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: providers-overlap
           path: providers-overlap.txt
