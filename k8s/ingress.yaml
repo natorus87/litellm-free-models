@@ -1,0 +1,29 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: litellm-proxy
+  namespace: litellm-free-models
+  labels:
+    app.kubernetes.io/name: litellm-free-models
+    app.kubernetes.io/component: proxy
+  annotations:
+    # Adjust for your ingress controller (nginx, traefik, etc.)
+    kubernetes.io/ingress.class: nginx
+    # If using cert-manager for TLS:
+    # cert-manager.io/cluster-issuer: letsencrypt-prod
+spec:
+  # tls:
+  #   - hosts:
+  #       - llm-proxy.your-domain.com
+  #     secretName: litellm-tls
+  rules:
+    - host: llm-proxy.your-domain.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: litellm-proxy
+                port:
+                  number: 4000

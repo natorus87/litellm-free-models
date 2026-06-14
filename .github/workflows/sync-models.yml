@@ -1,0 +1,36 @@
+name: Sync Free Models (weekly report)
+
+on:
+  schedule:
+    # Every Monday at 06:00 UTC
+    - cron: "0 6 * * 1"
+  workflow_dispatch:
+    description: "Trigger a one-off provider-overlap report"
+
+permissions:
+  contents: read
+
+jobs:
+  report:
+    name: generate provider-overlap report
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Generate provider-overlap report (no pricing, no --apply)
+        run: python3 find-shared-models.py --no-pricing
+
+      - name: Upload providers-overlap.txt
+        uses: actions/upload-artifact@v4
+        with:
+          name: providers-overlap
+          path: providers-overlap.txt
+          retention-days: 7
+          if-no-files-found: warn

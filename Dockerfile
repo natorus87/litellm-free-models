@@ -1,0 +1,20 @@
+# =============================================================================
+# LiteLLM Proxy – Custom Image with Config Bundled
+# =============================================================================
+# Use this if you want a self-contained image. Otherwise, use the official
+# image and mount config.yaml at runtime (see docker-compose.yaml).
+#
+# Usage:
+#   docker build -t litellm-free-models .
+#   docker run -p 4000:4000 --env-file .env litellm-free-models
+# =============================================================================
+
+FROM ghcr.io/berriai/litellm:main-latest AS base
+
+# Copy config
+COPY config.yaml /app/config.yaml
+
+EXPOSE 4000
+
+ENTRYPOINT ["litellm"]
+CMD ["--config", "/app/config.yaml", "--port", "4000"]

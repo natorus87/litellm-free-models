@@ -1,0 +1,41 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: litellm-slave-1
+  namespace: litellm-free-models
+  labels:
+    app.kubernetes.io/name: litellm-free-models
+    app.kubernetes.io/component: slave
+  annotations:
+    prometheus.io/scrape: "true"
+    prometheus.io/port: "4000"
+spec:
+  type: ClusterIP
+  selector:
+    app: litellm-slave-1
+  ports:
+    - name: http
+      port: 4000
+      targetPort: 4000
+      protocol: TCP
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: litellm-slave-2
+  namespace: litellm-free-models
+  labels:
+    app.kubernetes.io/name: litellm-free-models
+    app.kubernetes.io/component: slave
+  annotations:
+    prometheus.io/scrape: "true"
+    prometheus.io/port: "4000"
+spec:
+  type: ClusterIP
+  selector:
+    app: litellm-slave-2
+  ports:
+    - name: http
+      port: 4000
+      targetPort: 4000
+      protocol: TCP

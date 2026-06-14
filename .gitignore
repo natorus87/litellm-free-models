@@ -1,0 +1,42 @@
+# Render-Backups (render-config.py, find-shared-models.py, generate-config.py)
+config.yaml.bak.*
+config.yaml.tmp
+multi-instance/master/config.yaml.bak.*
+multi-instance/master/config.yaml.tmp
+
+# vim swap files
+*.swp
+*.swo
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+
+# Local cache (LiteLLM pricing DB; regenerierbar via --refresh-pricing)
+.cache/
+
+# Generated configs (regenerierbar via render-config.py / generate-config.py)
+# Diese enthalten echte API-Keys im Klartext -> NICHT committen
+config.yaml
+k8s/configmap.yaml
+multi-instance/master/config.yaml
+multi-instance/k8s/master/configmap.yaml
+multi-instance/k8s/slave/configmap.yaml
+
+# Local env overrides (echte API-Keys)
+.env
+.env.local
+.env.*.local
+
+# Generierte Reports (Artefakte, nicht Source)
+providers-overlap.txt
+
+# Tooling-spezifische Working-Dirs
+.opencode/
+.sisyphus/
+
+# IDE / Editor
+.idea/
+.vscode/
+.DS_Store

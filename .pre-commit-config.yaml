@@ -1,0 +1,30 @@
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.6.0
+    hooks:
+      - id: end-of-file-fixer
+      - id: check-yaml
+        # config.template.yaml and config.yaml contain os.environ/... placeholders
+        # and {{ENV_VAR}} substitutions that are not valid YAML; skip strict parsing.
+        args: ["--allow-multiple-documents"]
+      - id: check-toml
+      - id: check-merge-conflict
+      - id: check-added-large-files
+        args: ["--maxkb=1024"]
+      - id: trailing-whitespace
+
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.6.9
+    hooks:
+      - id: ruff
+        args: ["--fix", "--ignore=E501,W503,E402"]
+      - id: ruff-format
+
+  - repo: local
+    hooks:
+      - id: make-test
+        name: Run unit tests (pre-push)
+        entry: make test
+        language: system
+        pass_filenames: false
+        stages: [pre-push]

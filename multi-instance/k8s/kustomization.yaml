@@ -1,0 +1,13 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: litellm-free-models
+
+resources:
+  - ../namespace.yaml
+  - master/configmap.yaml
+  - master/deployment.yaml
+  - master/service.yaml
+  - slave/configmap.yaml
+  - slave/deployment.yaml
+  - slave/service.yaml

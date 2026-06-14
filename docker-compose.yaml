@@ -1,0 +1,79 @@
+version: "3.9"
+
+# Hinweis: Vor `docker compose up` muss die config.yaml aus dem Template
+# gerendert werden. Das passiert automatisch via Makefile-Target
+# `docker-compose-up` (das `render-config` aufruft), oder manuell:
+#   python3 render-config.py
+#   docker compose --env-file .env up -d
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: litellm-postgres
+    environment:
+      - POSTGRES_USER=${POSTGRES_USER:-litellm}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-litellm}
+      - POSTGRES_DB=${POSTGRES_DB:-litellm}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-litellm} -d ${POSTGRES_DB:-litellm}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    networks:
+      - litellm-network
+    restart: unless-stopped
+
+  litellm-proxy:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    # OR use the official image without a custom Dockerfile:
+    # image: ghcr.io/berriai/litellm:main-latest
+    container_name: litellm-free-models
+    ports:
+      - "4444:4000"  # LiteLLM proxy port
+    environment:
+      # Pass all API keys from .env file
+      - LITELLM_MASTER_KEY=${LITELLM_MASTER_KEY}
+      - OPENROUTER_API_KEY=${OPENROUTER_API_KEY}
+      - CEREBRAS_API_KEY=${CEREBRAS_API_KEY}
+      - GROQ_API_KEY=${GROQ_API_KEY}
+      - CLOUDFLARE_API_KEY=${CLOUDFLARE_API_KEY}
+      - CLOUDFLARE_API_BASE=${CLOUDFLARE_API_BASE}
+      - NVIDIA_API_KEY=${NVIDIA_API_KEY}
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - MISTRAL_API_KEY=${MISTRAL_API_KEY}
+      - COHERE_API_KEY=${COHERE_API_KEY}
+      - GITHUB_TOKEN=${GITHUB_TOKEN}
+      - OPENCODE_ZEN_API_KEY=${OPENCODE_ZEN_API_KEY}
+      - LLM7IO_API_KEY=${LLM7IO_API_KEY}
+      - HF_TOKEN=${HF_TOKEN}
+      # PostgreSQL Database URL for LiteLLM (key management, spend tracking, etc.)
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-litellm}:${POSTGRES_PASSWORD:-litellm}@postgres:5432/${POSTGRES_DB:-litellm}
+    volumes:
+      # Mount the config file so you can edit without rebuilding
+      - ./config.yaml:/app/config.yaml:ro
+    command: ["--config", "/app/config.yaml", "--port", "4000"]
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:4000/health/readiness"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    networks:
+      - litellm-network
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+networks:
+  litellm-network:
+    driver: bridge
+
+volumes:
+  postgres-data:
+    driver: local

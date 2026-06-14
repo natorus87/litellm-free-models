@@ -1,0 +1,958 @@
+# =============================================================================
+# LiteLLM Proxy Configuration – Free Models Only (TEMPLATE)
+# =============================================================================
+# DIESE DATEI IST DIE SINGLE SOURCE OF TRUTH.
+#
+# Sie wird zur Laufzeit via `render-config.py` (im Repo-Root) in
+# `config.yaml` ueberfuehrt. Direkte Edits an `config.yaml` werden beim
+# naechsten Render ueberschrieben.
+#
+# Platzhalter-Syntax: {{ENV_VAR}} wird durch den Wert der entsprechenden
+# Variable in `.env` ersetzt. Fehlt die Variable, wird der Block dieses
+# Providers komplett aus `config.yaml` entfernt (ausser bei OVHcloud, das
+# anonymen Free-Tier ohne Key unterstuetzt -- dort wird "" eingesetzt).
+#
+# Aggregates 24+ open-source & commercial LLM models across 12 free
+# providers (OpenRouter, Cerebras, Groq, Cloudflare Workers AI, Google AI
+# Studio, NVIDIA NIM, Mistral La Plateforme, Cohere, GitHub Models,
+# OpenCode Zen, LLM7.io, HuggingFace Inference API, OVHcloud)
+# into a single OpenAI-compatible endpoint with automatic load balancing,
+# fallback, and rate-limit cooldown.
+#
+# Client requests use the `model_name` (e.g. "gpt-oss-120b") and LiteLLM
+# routes to one of the backends behind it.
+#
+# Docs:  https://docs.litellm.ai/docs/proxy/configs
+#        https://docs.litellm.ai/docs/proxy/reliability
+# =============================================================================
+
+model_list:
+
+  # ===========================================================================
+  # gpt-oss-120b  –  6 FREE PROVIDERS
+  # ===========================================================================
+
+  - model_name: gpt-oss-120b
+    litellm_params:
+      model: openrouter/openai/gpt-oss-120b:free
+      api_key: {{OPENROUTER_API_KEY}}
+    model_info:
+      input_cost_per_token: 3.9e-08
+      output_cost_per_token: 1.8e-07
+      mode: chat
+    tpm: 200000
+    rpm: 1
+
+  - model_name: gpt-oss-120b
+    litellm_params:
+      model: cerebras/gpt-oss-120b
+      api_key: {{CEREBRAS_API_KEY}}
+    model_info:
+      input_cost_per_token: 3.9e-08
+      output_cost_per_token: 1.8e-07
+      mode: chat
+    tpm: 1000000
+    rpm: 30
+
+  - model_name: gpt-oss-120b
+    litellm_params:
+      model: groq/openai/gpt-oss-120b
+      api_key: {{GROQ_API_KEY}}
+    model_info:
+      input_cost_per_token: 3.9e-08
+      output_cost_per_token: 1.8e-07
+      mode: chat
+    tpm: 8000
+    rpm: 2
+
+  - model_name: gpt-oss-120b
+    litellm_params:
+      model: cloudflare/@cf/openai/gpt-oss-120b
+      api_key: {{CLOUDFLARE_API_KEY}}
+      api_base: {{CLOUDFLARE_API_BASE}}
+    model_info:
+      input_cost_per_token: 3.9e-08
+      output_cost_per_token: 1.8e-07
+      mode: chat
+    tpm: 500000
+    rpm: 10
+
+  - model_name: gpt-oss-120b
+    litellm_params:
+      model: openai/openai/gpt-oss-120b
+      api_key: {{NVIDIA_API_KEY}}
+      api_base: https://integrate.api.nvidia.com/v1
+    model_info:
+      input_cost_per_token: 3.9e-08
+      output_cost_per_token: 1.8e-07
+      mode: chat
+    tpm: 500000
+    rpm: 40
+
+  - model_name: gpt-oss-120b
+    litellm_params:
+      model: openai/gpt-oss-120b
+      api_key: {{OVHCLOUD_API_KEY}}
+      api_base: https://oai.endpoints.kepler.ai.cloud.ovh.net/v1
+    model_info:
+      input_cost_per_token: 3.9e-08
+      output_cost_per_token: 1.8e-07
+      mode: chat
+    tpm: 200000
+    rpm: 2
+
+  - model_name: gpt-oss-120b
+    litellm_params:
+      model: huggingface/openai/gpt-oss-120b
+      api_key: {{HF_TOKEN}}
+    model_info:
+      input_cost_per_token: 3.9e-08
+      output_cost_per_token: 1.8e-07
+      mode: chat
+    tpm: 200000
+    rpm: 30
+
+  # ===========================================================================
+  # llama-3.3-70b-instruct  –  6 FREE PROVIDERS
+  # ===========================================================================
+  - model_name: llama-3.3-70b-instruct
+    litellm_params:
+      model: openrouter/meta-llama/llama-3.3-70b-instruct:free
+      api_key: {{OPENROUTER_API_KEY}}
+    model_info:
+      input_cost_per_token: 1e-07
+      output_cost_per_token: 3.2e-07
+      mode: chat
+    tpm: 200000
+    rpm: 1
+
+  - model_name: llama-3.3-70b-instruct
+    litellm_params:
+      model: groq/llama-3.3-70b-versatile
+      api_key: {{GROQ_API_KEY}}
+    model_info:
+      input_cost_per_token: 1e-07
+      output_cost_per_token: 3.2e-07
+      mode: chat
+    tpm: 12000
+    rpm: 2
+
+  - model_name: llama-3.3-70b-instruct
+    litellm_params:
+      model: cloudflare/@cf/meta/llama-3.3-70b-instruct-fp8-fast
+      api_key: {{CLOUDFLARE_API_KEY}}
+      api_base: {{CLOUDFLARE_API_BASE}}
+    model_info:
+      input_cost_per_token: 1e-07
+      output_cost_per_token: 3.2e-07
+      mode: chat
+    tpm: 500000
+    rpm: 10
+
+  - model_name: llama-3.3-70b-instruct
+    litellm_params:
+      model: openai/Meta-Llama-3.3-70B-Instruct
+      api_key: {{GITHUB_TOKEN}}
+      api_base: https://models.inference.ai.azure.com
+    model_info:
+      input_cost_per_token: 1e-07
+      output_cost_per_token: 3.2e-07
+      mode: chat
+    tpm: 120000
+    rpm: 15
+
+  - model_name: llama-3.3-70b-instruct
+    litellm_params:
+      model: openai/Meta-Llama-3.3-70B-Instruct
+      api_key: {{OVHCLOUD_API_KEY}}
+      api_base: https://oai.endpoints.kepler.ai.cloud.ovh.net/v1
+    model_info:
+      input_cost_per_token: 1e-07
+      output_cost_per_token: 3.2e-07
+      mode: chat
+    tpm: 200000
+    rpm: 2
+
+  - model_name: llama-3.3-70b-instruct
+    litellm_params:
+      model: huggingface/meta-llama/Llama-3.3-70B-Instruct
+      api_key: {{HF_TOKEN}}
+    model_info:
+      input_cost_per_token: 1e-07
+      output_cost_per_token: 3.2e-07
+      mode: chat
+    tpm: 200000
+    rpm: 30
+
+  # ===========================================================================
+  # gpt-oss-20b  –  6 FREE PROVIDERS
+  # ===========================================================================
+  - model_name: gpt-oss-20b
+    litellm_params:
+      model: openrouter/openai/gpt-oss-20b:free
+      api_key: {{OPENROUTER_API_KEY}}
+    model_info:
+      input_cost_per_token: 2.9e-08
+      output_cost_per_token: 1.4e-07
+      mode: chat
+    tpm: 200000
+    rpm: 1
+
+  - model_name: gpt-oss-20b
+    litellm_params:
+      model: groq/openai/gpt-oss-20b
+      api_key: {{GROQ_API_KEY}}
+    model_info:
+      input_cost_per_token: 2.9e-08
+      output_cost_per_token: 1.4e-07
+      mode: chat
+    tpm: 8000
+    rpm: 2
+
+  - model_name: gpt-oss-20b
+    litellm_params:
+      model: cloudflare/@cf/openai/gpt-oss-20b
+      api_key: {{CLOUDFLARE_API_KEY}}
+      api_base: {{CLOUDFLARE_API_BASE}}
+    model_info:
+      input_cost_per_token: 2.9e-08
+      output_cost_per_token: 1.4e-07
+      mode: chat
+    tpm: 500000
+    rpm: 10
+
+  - model_name: gpt-oss-20b
+    litellm_params:
+      model: openai/openai/gpt-oss-20b
+      api_key: {{NVIDIA_API_KEY}}
+      api_base: https://integrate.api.nvidia.com/v1
+    model_info:
+      input_cost_per_token: 2.9e-08
+      output_cost_per_token: 1.4e-07
+      mode: chat
+    tpm: 500000
+    rpm: 40
+
+  - model_name: gpt-oss-20b
+    litellm_params:
+      model: openai/gpt-oss-20b
+      api_key: {{OVHCLOUD_API_KEY}}
+      api_base: https://oai.endpoints.kepler.ai.cloud.ovh.net/v1
+    model_info:
+      input_cost_per_token: 2.9e-08
+      output_cost_per_token: 1.4e-07
+      mode: chat
+    tpm: 200000
+    rpm: 2
+
+  - model_name: gpt-oss-20b
+    litellm_params:
+      model: huggingface/openai/gpt-oss-20b
+      api_key: {{HF_TOKEN}}
+    model_info:
+      input_cost_per_token: 2.9e-08
+      output_cost_per_token: 1.4e-07
+      mode: chat
+    tpm: 200000
+    rpm: 30
+
+  # ===========================================================================
+  # llama-3.1-8b  –  5 FREE PROVIDERS
+  # ===========================================================================
+  - model_name: llama-3.1-8b
+    litellm_params:
+      model: groq/llama-3.1-8b-instant
+      api_key: {{GROQ_API_KEY}}
+    model_info:
+      input_cost_per_token: 1.4e-07
+      output_cost_per_token: 1.4e-07
+      mode: chat
+    tpm: 6000
+    rpm: 30
+
+  - model_name: llama-3.1-8b
+    litellm_params:
+      model: cloudflare/@cf/meta/llama-3.1-8b-instruct-fp8-fast
+      api_key: {{CLOUDFLARE_API_KEY}}
+      api_base: {{CLOUDFLARE_API_BASE}}
+    model_info:
+      input_cost_per_token: 1.4e-07
+      output_cost_per_token: 1.4e-07
+      mode: chat
+    tpm: 500000
+    rpm: 10
+
+  - model_name: llama-3.1-8b
+    litellm_params:
+      model: openai/meta/llama-3.1-8b-instruct
+      api_key: {{NVIDIA_API_KEY}}
+      api_base: https://integrate.api.nvidia.com/v1
+    model_info:
+      input_cost_per_token: 1.4e-07
+      output_cost_per_token: 1.4e-07
+      mode: chat
+    tpm: 500000
+    rpm: 40
+
+  - model_name: llama-3.1-8b
+    litellm_params:
+      model: openai/Meta-Llama-3.1-8B-Instruct
+      api_key: {{GITHUB_TOKEN}}
+      api_base: https://models.inference.ai.azure.com
+    model_info:
+      input_cost_per_token: 1.4e-07
+      output_cost_per_token: 1.4e-07
+      mode: chat
+    tpm: 120000
+    rpm: 15
+
+  - model_name: llama-3.1-8b
+    litellm_params:
+      model: huggingface/meta-llama/Llama-3.1-8B-Instruct
+      api_key: {{HF_TOKEN}}
+    model_info:
+      input_cost_per_token: 1.4e-07
+      output_cost_per_token: 1.4e-07
+      mode: chat
+    tpm: 200000
+    rpm: 30
+
+  # ===========================================================================
+  # llama-4-scout-instruct  –  4 FREE PROVIDERS
+  # ===========================================================================
+  - model_name: llama-4-scout
+    litellm_params:
+      model: groq/meta-llama/llama-4-scout-17b-16e-instruct
+      api_key: {{GROQ_API_KEY}}
+    model_info:
+      input_cost_per_token: 1e-07
+      output_cost_per_token: 3e-07
+      mode: chat
+    tpm: 30000
+    rpm: 2
+
+  - model_name: llama-4-scout
+    litellm_params:
+      model: cloudflare/@cf/meta/llama-4-scout-instruct
+      api_key: {{CLOUDFLARE_API_KEY}}
+      api_base: {{CLOUDFLARE_API_BASE}}
+    model_info:
+      input_cost_per_token: 1e-07
+      output_cost_per_token: 3e-07
+      mode: chat
+    tpm: 500000
+    rpm: 10
+
+  - model_name: llama-4-scout
+    litellm_params:
+      model: openai/meta/llama-4-scout-17b-16e-instruct
+      api_key: {{GITHUB_TOKEN}}
+      api_base: https://models.inference.ai.azure.com
+    model_info:
+      input_cost_per_token: 1e-07
+      output_cost_per_token: 3e-07
+      mode: chat
+    tpm: 120000
+    rpm: 15
+
+  - model_name: llama-4-scout
+    litellm_params:
+      model: huggingface/meta-llama/Llama-4-Scout-17B-16E-Instruct
+      api_key: {{HF_TOKEN}}
+    model_info:
+      input_cost_per_token: 1e-07
+      output_cost_per_token: 3e-07
+      mode: chat
+    tpm: 200000
+    rpm: 30
+
+  # ===========================================================================
+  # gemma-3-12b-it  –  4 FREE PROVIDERS
+  # ===========================================================================
+  - model_name: gemma-3-12b-it
+    litellm_params:
+      model: gemini/gemma-3-12b-it
+      api_key: {{GEMINI_API_KEY}}
+    model_info:
+      input_cost_per_token: 5e-08
+      output_cost_per_token: 1.5e-07
+      mode: chat
+    tpm: 15000
+    rpm: 30
+
+  - model_name: gemma-3-12b-it
+    litellm_params:
+      model: cloudflare/@cf/google/gemma-3-12b-it
+      api_key: {{CLOUDFLARE_API_KEY}}
+      api_base: {{CLOUDFLARE_API_BASE}}
+    model_info:
+      input_cost_per_token: 5e-08
+      output_cost_per_token: 1.5e-07
+      mode: chat
+    tpm: 500000
+    rpm: 10
+
+  - model_name: gemma-3-12b-it
+    litellm_params:
+      model: openrouter/google/gemma-3-12b-it:free
+      api_key: {{OPENROUTER_API_KEY}}
+    model_info:
+      input_cost_per_token: 5e-08
+      output_cost_per_token: 1.5e-07
+      mode: chat
+    tpm: 200000
+    rpm: 1
+
+  - model_name: gemma-3-12b-it
+    litellm_params:
+      model: huggingface/google/gemma-3-12b-it
+      api_key: {{HF_TOKEN}}
+    model_info:
+      input_cost_per_token: 5e-08
+      output_cost_per_token: 1.5e-07
+      mode: chat
+    tpm: 200000
+    rpm: 30
+
+  # ===========================================================================
+  # gemma-4-26b-a4b-it  –  3 FREE PROVIDERS
+  # ===========================================================================
+  - model_name: gemma-4-26b-a4b-it
+    litellm_params:
+      model: openrouter/google/gemma-4-26b-a4b-it:free
+      api_key: {{OPENROUTER_API_KEY}}
+    model_info:
+      input_cost_per_token: 6e-08
+      output_cost_per_token: 3.3e-07
+      mode: chat
+    tpm: 200000
+    rpm: 1
+
+  - model_name: gemma-4-26b-a4b-it
+    litellm_params:
+      model: cloudflare/@cf/google/gemma-4-26b-a4b-it
+      api_key: {{CLOUDFLARE_API_KEY}}
+      api_base: {{CLOUDFLARE_API_BASE}}
+    model_info:
+      input_cost_per_token: 6e-08
+      output_cost_per_token: 3.3e-07
+      mode: chat
+    tpm: 500000
+    rpm: 10
+
+  - model_name: gemma-4-26b-a4b-it
+    litellm_params:
+      model: huggingface/google/gemma-4-26b-a4b-it
+      api_key: {{HF_TOKEN}}
+    model_info:
+      input_cost_per_token: 6e-08
+      output_cost_per_token: 3.3e-07
+      mode: chat
+    tpm: 200000
+    rpm: 30
+
+  # ===========================================================================
+  # kimi-k2.6  –  3 FREE PROVIDERS
+  # ===========================================================================
+  - model_name: kimi-k2.6
+    litellm_params:
+      model: openrouter/moonshotai/kimi-k2.6:free
+      api_key: {{OPENROUTER_API_KEY}}
+    model_info:
+      input_cost_per_token: 6.7e-07
+      output_cost_per_token: 3.39e-06
+      mode: chat
+    tpm: 200000
+    rpm: 1
+
+  - model_name: kimi-k2.6
+    litellm_params:
+      model: cloudflare/@cf/moonshotai/kimi-k2.6
+      api_key: {{CLOUDFLARE_API_KEY}}
+      api_base: {{CLOUDFLARE_API_BASE}}
+    model_info:
+      input_cost_per_token: 6.7e-07
+      output_cost_per_token: 3.39e-06
+      mode: chat
+    tpm: 500000
+    rpm: 10
+
+  - model_name: kimi-k2.6
+    litellm_params:
+      model: openai/moonshotai/kimi-k2-instruct
+      api_key: {{NVIDIA_API_KEY}}
+      api_base: https://integrate.api.nvidia.com/v1
+    model_info:
+      input_cost_per_token: 6.7e-07
+      output_cost_per_token: 3.39e-06
+      mode: chat
+    tpm: 500000
+    rpm: 40
+
+  # ===========================================================================
+  # nemotron-3-120b  –  3 FREE PROVIDERS
+  # ===========================================================================
+  - model_name: nemotron-3-120b
+    litellm_params:
+      model: openrouter/nvidia/nemotron-3-super-120b-a12b:free
+      api_key: {{OPENROUTER_API_KEY}}
+    model_info:
+      input_cost_per_token: 9e-08
+      output_cost_per_token: 4.5e-07
+      mode: chat
+    tpm: 200000
+    rpm: 1
+
+  - model_name: nemotron-3-120b
+    litellm_params:
+      model: cloudflare/@cf/nvidia/nemotron-3-120b-a12b
+      api_key: {{CLOUDFLARE_API_KEY}}
+      api_base: {{CLOUDFLARE_API_BASE}}
+    model_info:
+      input_cost_per_token: 9e-08
+      output_cost_per_token: 4.5e-07
+      mode: chat
+    tpm: 500000
+    rpm: 10
+
+  - model_name: nemotron-3-120b
+    litellm_params:
+      model: openai/nvidia/nemotron-3-super-120b-a12b
+      api_key: {{NVIDIA_API_KEY}}
+      api_base: https://integrate.api.nvidia.com/v1
+    model_info:
+      input_cost_per_token: 9e-08
+      output_cost_per_token: 4.5e-07
+      mode: chat
+    tpm: 500000
+    rpm: 40
+
+  # ===========================================================================
+  # qwen3-next-80b-a3b  –  2 FREE PROVIDERS
+  # ===========================================================================
+  - model_name: qwen3-next-80b-a3b
+    litellm_params:
+      model: openrouter/qwen/qwen3-next-80b-a3b-instruct:free
+      api_key: {{OPENROUTER_API_KEY}}
+    model_info:
+      input_cost_per_token: 9e-08
+      output_cost_per_token: 4.5e-07
+      mode: chat
+    tpm: 200000
+    rpm: 1
+
+  # ===========================================================================
+  # deepseek-v4-flash  –  3 FREE PROVIDERS  (OR + NVIDIA + Zen)
+  # ===========================================================================
+  - model_name: deepseek-v4-flash
+    litellm_params:
+      model: openrouter/deepseek/deepseek-v4-flash:free
+      api_key: {{OPENROUTER_API_KEY}}
+    model_info:
+      input_cost_per_token: 9.8e-08
+      output_cost_per_token: 1.96e-07
+      mode: chat
+    tpm: 200000
+    rpm: 1
+
+  - model_name: deepseek-v4-flash
+    litellm_params:
+      model: openai/deepseek/deepseek-v4-flash
+      api_key: {{NVIDIA_API_KEY}}
+      api_base: https://integrate.api.nvidia.com/v1
+    model_info:
+      input_cost_per_token: 9.8e-08
+      output_cost_per_token: 1.96e-07
+      mode: chat
+    tpm: 500000
+    rpm: 40
+
+  - model_name: deepseek-v4-flash
+    litellm_params:
+      model: openai/deepseek-v4-flash-free
+      api_key: {{OPENCODE_ZEN_API_KEY}}
+      api_base: https://opencode.ai/zen/v1
+    model_info:
+      input_cost_per_token: 9.8e-08
+      output_cost_per_token: 1.96e-07
+      mode: chat
+    tpm: 200000
+    rpm: 10
+
+  - model_name: deepseek-v4-flash
+    litellm_params:
+      model: huggingface/deepseek-ai/DeepSeek-V4-Flash
+      api_key: {{HF_TOKEN}}
+    model_info:
+      input_cost_per_token: 9.8e-08
+      output_cost_per_token: 1.96e-07
+      mode: chat
+    tpm: 200000
+    rpm: 30
+
+  # ===========================================================================
+  # nemotron-3-nano-30b-a3b  –  3 FREE PROVIDERS
+  # ===========================================================================
+  - model_name: nemotron-3-nano-30b
+    litellm_params:
+      model: openrouter/nvidia/nemotron-3-nano-30b-a3b:free
+      api_key: {{OPENROUTER_API_KEY}}
+    model_info:
+      input_cost_per_token: 5e-08
+      output_cost_per_token: 2e-07
+      mode: chat
+    tpm: 200000
+    rpm: 1
+
+  - model_name: nemotron-3-nano-30b
+    litellm_params:
+      model: openai/nvidia/nemotron-3-nano-30b-a3b
+      api_key: {{NVIDIA_API_KEY}}
+      api_base: https://integrate.api.nvidia.com/v1
+    model_info:
+      input_cost_per_token: 5e-08
+      output_cost_per_token: 2e-07
+      mode: chat
+    tpm: 500000
+    rpm: 40
+
+  - model_name: nemotron-3-nano-30b
+    litellm_params:
+      model: huggingface/nvidia/Nemotron-3-Nano-30B-A3B
+      api_key: {{HF_TOKEN}}
+    model_info:
+      input_cost_per_token: 5e-08
+      output_cost_per_token: 2e-07
+      mode: chat
+    tpm: 200000
+    rpm: 30
+
+  # ===========================================================================
+  # mistral-large  –  2 FREE PROVIDERS  (Mistral + GitHub Models)
+  # ===========================================================================
+  - model_name: mistral-large
+    litellm_params:
+      model: mistral/mistral-large-latest
+      api_key: {{MISTRAL_API_KEY}}
+    model_info:
+      input_cost_per_token: 2e-06
+      output_cost_per_token: 6e-06
+      mode: chat
+    tpm: 500000
+    rpm: 2
+
+  - model_name: mistral-large
+    litellm_params:
+      model: openai/Mistral-large-2411
+      api_key: {{GITHUB_TOKEN}}
+      api_base: https://models.inference.ai.azure.com
+    model_info:
+      input_cost_per_token: 2e-06
+      output_cost_per_token: 6e-06
+      mode: chat
+    tpm: 120000
+    rpm: 15
+
+  # ===========================================================================
+  # command-r-plus  –  2 FREE PROVIDERS  (Cohere + GitHub Models)
+  # ===========================================================================
+  - model_name: command-r-plus
+    litellm_params:
+      model: cohere/command-r-plus-08-2024
+      api_key: {{COHERE_API_KEY}}
+    model_info:
+      input_cost_per_token: 2.5e-06
+      output_cost_per_token: 1e-05
+      mode: chat
+    tpm: 500000
+    rpm: 20
+
+  - model_name: command-r-plus
+    litellm_params:
+      model: openai/Cohere-command-r-plus-08-2024
+      api_key: {{GITHUB_TOKEN}}
+      api_base: https://models.inference.ai.azure.com
+    model_info:
+      input_cost_per_token: 2.5e-06
+      output_cost_per_token: 1e-05
+      mode: chat
+    tpm: 120000
+    rpm: 15
+
+  # ===========================================================================
+  # nemotron-3-ultra  –  3 FREE PROVIDERS
+  # ===========================================================================
+  - model_name: nemotron-3-ultra
+    litellm_params:
+      model: openrouter/nvidia/nemotron-3-ultra-550b-a55b:free
+      api_key: {{OPENROUTER_API_KEY}}
+    model_info:
+      input_cost_per_token: 5e-07
+      output_cost_per_token: 2.5e-06
+      mode: chat
+    tpm: 200000
+    rpm: 1
+
+  - model_name: nemotron-3-ultra
+    litellm_params:
+      model: openai/nemotron-3-ultra-free
+      api_key: {{OPENCODE_ZEN_API_KEY}}
+      api_base: https://opencode.ai/zen/v1
+    model_info:
+      input_cost_per_token: 5e-07
+      output_cost_per_token: 2.5e-06
+      mode: chat
+    tpm: 200000
+    rpm: 10
+
+  - model_name: nemotron-3-ultra
+    litellm_params:
+      model: openai/nvidia/nemotron-3-ultra-550b-a55b
+      api_key: {{NVIDIA_API_KEY}}
+      api_base: https://integrate.api.nvidia.com/v1
+    model_info:
+      input_cost_per_token: 5e-07
+      output_cost_per_token: 2.5e-06
+      mode: chat
+    tpm: 500000
+    rpm: 40
+
+  # ===========================================================================
+  # big-pickle  –  OpenCode Zen (single provider)
+  # ===========================================================================
+  - model_name: big-pickle
+    litellm_params:
+      model: openai/big-pickle
+      api_key: {{OPENCODE_ZEN_API_KEY}}
+      api_base: https://opencode.ai/zen/v1
+    model_info:
+      mode: chat
+    tpm: 200000
+    rpm: 10
+
+  # ===========================================================================
+  # north-mini-code  –  OpenCode Zen (single provider)
+  # ===========================================================================
+  - model_name: north-mini-code
+    litellm_params:
+      model: openai/north-mini-code-free
+      api_key: {{OPENCODE_ZEN_API_KEY}}
+      api_base: https://opencode.ai/zen/v1
+    model_info:
+      mode: chat
+    tpm: 200000
+    rpm: 10
+
+  # ===========================================================================
+  # llama-4-maverick-17b  –  3 FREE PROVIDERS
+  # ===========================================================================
+  - model_name: llama-4-maverick
+    litellm_params:
+      model: groq/meta-llama/llama-4-maverick-17b-128e-instruct
+      api_key: {{GROQ_API_KEY}}
+    model_info:
+      input_cost_per_token: 1.5e-07
+      output_cost_per_token: 4e-07
+      mode: chat
+    tpm: 30000
+    rpm: 2
+
+  - model_name: llama-4-maverick
+    litellm_params:
+      model: openrouter/meta-llama/llama-4-maverick:free
+      api_key: {{OPENROUTER_API_KEY}}
+    model_info:
+      input_cost_per_token: 1.5e-07
+      output_cost_per_token: 4e-07
+      mode: chat
+    tpm: 200000
+    rpm: 1
+
+  - model_name: llama-4-maverick
+    litellm_params:
+      model: openai/meta/llama-4-maverick-17b-128e-instruct
+      api_key: {{NVIDIA_API_KEY}}
+      api_base: https://integrate.api.nvidia.com/v1
+    model_info:
+      input_cost_per_token: 1.5e-07
+      output_cost_per_token: 4e-07
+      mode: chat
+    tpm: 500000
+    rpm: 40
+
+  - model_name: llama-4-maverick
+    litellm_params:
+      model: huggingface/meta-llama/Llama-4-Maverick-17B-128E-Instruct
+      api_key: {{HF_TOKEN}}
+    model_info:
+      input_cost_per_token: 1.5e-07
+      output_cost_per_token: 4e-07
+      mode: chat
+    tpm: 200000
+    rpm: 30
+
+  # ===========================================================================
+  # gemma-4-31b-it  –  3 FREE PROVIDERS
+  # ===========================================================================
+  - model_name: gemma-4-31b-it
+    litellm_params:
+      model: openrouter/google/gemma-4-31b-it:free
+      api_key: {{OPENROUTER_API_KEY}}
+    model_info:
+      input_cost_per_token: 1.2e-07
+      output_cost_per_token: 3.7e-07
+      mode: chat
+    tpm: 200000
+    rpm: 1
+
+  - model_name: gemma-4-31b-it
+    litellm_params:
+      model: openai/google/gemma-4-31b-it
+      api_key: {{NVIDIA_API_KEY}}
+      api_base: https://integrate.api.nvidia.com/v1
+    model_info:
+      input_cost_per_token: 1.2e-07
+      output_cost_per_token: 3.7e-07
+      mode: chat
+    tpm: 500000
+    rpm: 40
+
+  - model_name: gemma-4-31b-it
+    litellm_params:
+      model: huggingface/google/gemma-4-31b-it
+      api_key: {{HF_TOKEN}}
+    model_info:
+      input_cost_per_token: 1.2e-07
+      output_cost_per_token: 3.7e-07
+      mode: chat
+    tpm: 200000
+    rpm: 30
+
+  # ===========================================================================
+  # LLM7.io  –  FREE OPENAI-COMPATIBLE API (12. Provider)
+  # ===========================================================================
+  # Endpoint:      https://api.llm7.io/v1
+  # Free tier:     2 RPM (40 RPM with free token), 30+ models
+  # Token:         https://token.llm7.io (free, no credit card)
+  # Docs:          https://docs.llm7.io/
+  #
+  # deepseek-r1-0528  –  LLM7.io (single provider)
+  # ===========================================================================
+  - model_name: deepseek-r1-0528
+    litellm_params:
+      model: openai/deepseek-r1-0528
+      api_key: {{LLM7IO_API_KEY}}
+      api_base: https://api.llm7.io/v1
+    model_info:
+      input_cost_per_token: 0
+      output_cost_per_token: 0
+      mode: chat
+    tpm: 200000
+    rpm: 40
+
+  # ===========================================================================
+  # qwen3-235b  –  LLM7.io (single provider)
+  # ===========================================================================
+  - model_name: qwen3-235b
+    litellm_params:
+      model: openai/qwen3-235b
+      api_key: {{LLM7IO_API_KEY}}
+      api_base: https://api.llm7.io/v1
+    model_info:
+      input_cost_per_token: 0
+      output_cost_per_token: 0
+      mode: chat
+    tpm: 200000
+    rpm: 40
+
+  # ===========================================================================
+  # mistral-small-3.2  –  LLM7.io (single provider)
+  # ===========================================================================
+  - model_name: mistral-small-3.2
+    litellm_params:
+      model: openai/mistral-small-3.2
+      api_key: {{LLM7IO_API_KEY}}
+      api_base: https://api.llm7.io/v1
+    model_info:
+      input_cost_per_token: 0
+      output_cost_per_token: 0
+      mode: chat
+    tpm: 200000
+    rpm: 40
+
+  # ===========================================================================
+  # codestral-latest  –  LLM7.io (single provider)
+  # ===========================================================================
+  - model_name: codestral-latest
+    litellm_params:
+      model: openai/codestral-latest
+      api_key: {{LLM7IO_API_KEY}}
+      api_base: https://api.llm7.io/v1
+    model_info:
+      input_cost_per_token: 0
+      output_cost_per_token: 0
+      mode: chat
+    tpm: 200000
+    rpm: 40
+
+  # ===========================================================================
+  # openrouter-free  –  OpenRouter Free Models Router
+  # ===========================================================================
+  # Wählt automatisch ein passendes Free-Modell aus OpenRouter aus.
+  # Nützlich als Catch-All-Fallback oder wenn der Client kein spezifisches
+  # Modell braucht.
+  - model_name: openrouter-free
+    litellm_params:
+      model: openrouter/openrouter/free
+      api_key: {{OPENROUTER_API_KEY}}
+    model_info:
+      mode: chat
+    tpm: 200000
+    rpm: 1
+
+# =============================================================================
+# Router Settings  –  Load Balancing, Fallback & Cooldown
+# =============================================================================
+router_settings:
+  routing_strategy: simple-shuffle
+  num_retries: 2
+  retry_after: 5
+  allowed_fails: 3
+  cooldown_time: 30
+
+  fallbacks:
+    - {"gpt-oss-120b":              ["gpt-oss-20b", "llama-3.3-70b-instruct", "nemotron-3-120b", "mistral-large"]}
+    - {"llama-3.3-70b-instruct":    ["llama-3.1-8b", "mistral-large", "gpt-oss-20b", "gemma-3-12b-it"]}
+    - {"gpt-oss-20b":               ["llama-3.1-8b", "gemma-3-12b-it", "deepseek-v4-flash", "mistral-large"]}
+    - {"llama-3.1-8b":              ["gemma-3-12b-it", "deepseek-v4-flash", "qwen3-next-80b-a3b", "llama-4-scout"]}
+    - {"qwen3-next-80b-a3b":        ["mistral-large", "llama-3.3-70b-instruct", "gpt-oss-120b", "deepseek-v4-flash"]}
+    - {"kimi-k2.6":                 ["gpt-oss-120b", "llama-3.3-70b-instruct", "nemotron-3-120b", "mistral-large"]}
+    - {"mistral-large":             ["llama-3.3-70b-instruct", "command-r-plus", "gpt-oss-120b", "nemotron-3-ultra"]}
+    - {"command-r-plus":            ["mistral-large", "llama-3.3-70b-instruct", "nemotron-3-ultra"]}
+    - {"llama-4-maverick":          ["gpt-oss-120b", "llama-3.3-70b-instruct", "nemotron-3-120b", "mistral-large"]}
+    - {"gemma-4-31b-it":            ["gemma-3-12b-it", "gpt-oss-20b", "llama-3.3-70b-instruct", "mistral-large"]}
+    - {"*":                         ["llama-3.1-8b", "gpt-oss-20b", "gemma-3-12b-it", "deepseek-v4-flash", "openrouter-free"]}
+
+  context_window_fallbacks:
+    - {"llama-3.1-8b":              ["llama-3.3-70b-instruct", "gpt-oss-120b", "mistral-large", "nemotron-3-120b"]}
+    - {"qwen3-next-80b-a3b":        ["mistral-large", "llama-3.3-70b-instruct", "gpt-oss-120b"]}
+    - {"gemma-3-12b-it":            ["mistral-large", "llama-3.3-70b-instruct", "gpt-oss-120b"]}
+    - {"deepseek-v4-flash":         ["mistral-large", "llama-3.3-70b-instruct", "nemotron-3-ultra"]}
+    - {"north-mini-code":           ["deepseek-v4-flash", "mistral-large", "llama-3.3-70b-instruct"]}
+
+# =============================================================================
+# LiteLLM Global Settings
+# =============================================================================
+litellm_settings:
+  drop_params: true
+  set_verbose: false
+  request_timeout: 120
+  num_retries: 2
+
+# =============================================================================
+# General Server Settings
+# =============================================================================
+general_settings:
+  master_key: {{LITELLM_MASTER_KEY}}
+  allow_models_on_dynamic_config: false
+
