@@ -15,19 +15,38 @@ spec:
     metadata:
       labels:
         app: postgres
+        app.kubernetes.io/name: litellm-free-models
+        app.kubernetes.io/component: database
     spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 70
+        runAsGroup: 70
+        fsGroup: 70
+        seccompProfile:
+          type: RuntimeDefault
       containers:
         - name: postgres
-          image: postgres:15-alpine
+          image: postgres:16-alpine
           env:
             - name: POSTGRES_USER
               value: "litellm"
+            # Kein Passwort im Manifest: `make k8s-secret` erzeugt
+            # litellm-postgres-secret aus POSTGRES_PASSWORD in .env.
             - name: POSTGRES_PASSWORD
-              value: "litellm-secret"
+              valueFrom:
+                secretKeyRef:
+                  name: litellm-postgres-secret
+                  key: postgres-password
             - name: POSTGRES_DB
               value: "litellm"
           ports:
             - containerPort: 5432
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
           resources:
             requests:
               cpu: 250m
@@ -35,6 +54,24 @@ spec:
             limits:
               cpu: 500m
               memory: 512Mi
+          livenessProbe:
+            exec:
+              command:
+                - "sh"
+                - "-c"
+                - 'pg_isready -U "$POSTGRES_USER" -d "$POSTGRES_DB"'
+            initialDelaySeconds: 15
+            periodSeconds: 30
+            timeoutSeconds: 5
+          readinessProbe:
+            exec:
+              command:
+                - "sh"
+                - "-c"
+                - 'pg_isready -U "$POSTGRES_USER" -d "$POSTGRES_DB"'
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 3
           volumeMounts:
             - name: pgdata
               mountPath: /var/lib/postgresql/data

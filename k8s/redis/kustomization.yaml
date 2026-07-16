@@ -1,0 +1,13 @@
+# Shared Redis base – consumed by:
+#   - single-instance: make k8s-apply (kubectl apply -k k8s/redis/)
+#   - multi-instance:  multi-instance/k8s/kustomization.yaml (base reference)
+# The litellm-redis-secret is created separately via `make k8s-secret`
+# (see secret.yaml.template).
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: litellm-free-models
+
+resources:
+  - deployment.yaml
+  - service.yaml

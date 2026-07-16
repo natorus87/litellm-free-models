@@ -1,5 +1,24 @@
 version: 2
 updates:
+  # Basis-Image im Dockerfile (gepinnter LiteLLM-Tag). Compose-/K8s-Manifeste
+  # kann Dependabot nicht bumpen – bei einem Update-PR den Tag auch in
+  # docker-compose.yaml, multi-instance/ und k8s/ nachziehen (siehe Makefile
+  # LITELLM_IMAGE).
+  - package-ecosystem: "docker"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "06:00"
+      timezone: "UTC"
+    open-pull-requests-limit: 3
+    commit-message:
+      prefix: "chore"
+      include: "scope"
+    labels:
+      - "dependencies"
+      - "docker"
+
   - package-ecosystem: "github-actions"
     directory: "/.github/workflows"
     schedule:

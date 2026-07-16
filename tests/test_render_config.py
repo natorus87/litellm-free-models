@@ -1,12 +1,10 @@
 """Tests fuer render-config.py."""
-import os
-import shutil
 import tempfile
 import textwrap
 import unittest
 from pathlib import Path
 
-from tests._loader import load_script, REPO_ROOT
+from tests._loader import load_script
 
 rc = load_script("render-config.py")
 
@@ -284,10 +282,11 @@ class TestAtomicWrite(unittest.TestCase):
             rc.render(tmpl, env_p, out)
             # Neue Inhalte sind drin
             self.assertIn("model_list", out.read_text())
-            # Backup existiert (enthaelt aktuellen/neuen Inhalt)
+            # Backup existiert und enthaelt den ALTEN Inhalt (Sicherung der
+            # vorherigen Version, nicht eine Kopie der neuen)
             backups = list(Path(d).glob("out.yaml.bak.*"))
             self.assertEqual(len(backups), 1)
-            self.assertIn("model_list", backups[0].read_text())
+            self.assertIn("EXISTING CONTENT", backups[0].read_text())
             # .tmp darf nicht uebrigbleiben
             self.assertFalse(out.with_suffix(out.suffix + ".tmp").exists())
 
@@ -312,10 +311,20 @@ class TestEndToEndRender(unittest.TestCase):
                       model: cerebras/gpt-oss-120b
                       api_key: {{CEREBRAS_API_KEY}}
 
+                  - model_name: llama-3.1-8b
+                    litellm_params:
+                      model: openrouter/meta-llama/llama-3.1-8b
+                      api_key: {{OPENROUTER_API_KEY}}
+
+                  - model_name: openrouter-free
+                    litellm_params:
+                      model: openrouter/openrouter/free
+                      api_key: {{OPENROUTER_API_KEY}}
+
                 router_settings:
                   routing_strategy: simple-shuffle
                 fallbacks:
-                  - {"gpt-oss-120b": ["llama-3.1-8b"]}
+                  - {"gpt-oss-120b": ["llama-3.1-8b", "does-not-exist"]}
                 """))
             env_p.write_text(
                 "OPENROUTER_API_KEY=test-or\n"
@@ -328,6 +337,8 @@ class TestEndToEndRender(unittest.TestCase):
             self.assertNotIn("cerebras/gpt-oss-120b", content)
             # Fallback-Chain sollte "llama-3.1-8b" noch enthalten
             self.assertIn("llama-3.1-8b", content)
+            # Ziele ohne existierendes model_name werden entfernt
+            self.assertNotIn("does-not-exist", content)
             # OPENROUTER_API_KEY ist gesetzt -> openrouter-free wird angehaengt
             self.assertIn("openrouter-free", content)
 

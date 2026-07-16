@@ -4,7 +4,11 @@ kind: Kustomization
 namespace: litellm-free-models
 
 resources:
-  - ../namespace.yaml
+  - namespace.yaml
+  # Shared Redis base (same manifests as the single-instance setup –
+  # edit in k8s/redis/, never copy). The litellm-redis-secret is created
+  # via `make k8s-secret` at the repo root.
+  - ../../k8s/redis
   - master/configmap.yaml
   - master/deployment.yaml
   - master/service.yaml

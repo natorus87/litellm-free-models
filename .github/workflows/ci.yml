@@ -10,6 +10,26 @@ permissions:
   contents: read
 
 jobs:
+  lint:
+    name: lint (ruff)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install ruff
+        run: pip install ruff
+
+      # Blockierend – ein Lint, der nie fehlschlagen kann, erzeugt nur
+      # falsches Vertrauen.
+      - name: Run ruff
+        run: ruff check .
+
   test:
     name: test (python ${{ matrix.python-version }})
     runs-on: ubuntu-latest
@@ -27,21 +47,85 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
 
-      - name: Install ruff (optional linter)
-        run: |
-          pip install ruff || true
-
-      - name: Run ruff (best-effort)
-        run: |
-          if python -c "import ruff" 2>/dev/null; then
-            echo "Running ruff..."
-            ruff check . || echo "::warning::ruff reported issues"
-          else
-            echo "ruff not installed — skipping lint step"
-          fi
-
-      - name: Run tests
+      # make test laeuft ohne Pipe – fehlschlagende Tests machen den Job rot
+      # (frueher verschluckte `| tail -5` den unittest-Exit-Code).
+      - name: Run tests (inkl. Config-Invarianten)
         run: make test
+
+      - name: Prepare CI .env (Platzhalter-Keys aus .env.example)
+        run: |
+          cp .env.example .env
+          sed -i 's/^REDIS_PASSWORD=$/REDIS_PASSWORD=ci-dummy-password/' .env
+          sed -i 's/^POSTGRES_PASSWORD=$/POSTGRES_PASSWORD=ci-dummy-password/' .env
 
       - name: Smoke-test render-config (dry-run)
         run: python3 render-config.py --dry-run
+
+      - name: Full render + multi-instance generate
+        run: |
+          python3 render-config.py
+          python3 render-config.py --no-redis --output config.check.yaml
+          cd multi-instance && python3 generate-config.py
+
+      - name: Matrix-Generator (Doku-Drift-Check)
+        run: |
+          python3 find-shared-models.py --write-docs
+          if ! git diff --quiet -- AGENTS.md README.md; then
+            echo "::error::Deployment-Matrix in AGENTS.md/README.md ist nicht aktuell."
+            echo "Bitte lokal 'python3 find-shared-models.py --write-docs' ausfuehren und committen."
+            git diff -- AGENTS.md README.md | head -80
+            exit 1
+          fi
+
+  validate-manifests:
+    name: validate compose + k8s manifests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Prepare CI .env + per-instance .env files
+        run: |
+          cp .env.example .env
+          sed -i 's/^REDIS_PASSWORD=$/REDIS_PASSWORD=ci-dummy-password/' .env
+          sed -i 's/^POSTGRES_PASSWORD=$/POSTGRES_PASSWORD=ci-dummy-password/' .env
+          cp multi-instance/.env.example multi-instance/.env
+          sed -i 's/^REDIS_PASSWORD=$/REDIS_PASSWORD=ci-dummy-password/' multi-instance/.env
+          sed -i 's/^POSTGRES_PASSWORD=$/POSTGRES_PASSWORD=ci-dummy-password/' multi-instance/.env
+          for d in master slave1 slave2; do
+            cp "multi-instance/$d/.env.example" "multi-instance/$d/.env"
+          done
+
+      - name: Render configs (fuer ConfigMaps + Compose-Mounts)
+        run: |
+          python3 render-config.py
+          cd multi-instance && python3 generate-config.py
+          make k8s-configmap
+
+      - name: Validate docker-compose.yaml
+        run: docker compose -f docker-compose.yaml config -q
+
+      - name: Validate multi-instance/docker-compose.yaml
+        run: docker compose -f multi-instance/docker-compose.yaml config -q
+
+      - name: Install kubeconform
+        run: |
+          curl -sSL https://github.com/yannh/kubeconform/releases/latest/download/kubeconform-linux-amd64.tar.gz \
+            | sudo tar xz -C /usr/local/bin kubeconform
+          kubeconform -v
+
+      - name: Validate K8s manifests (kubeconform)
+        run: |
+          find k8s multi-instance/k8s -name '*.yaml' \
+            ! -name '*.template' ! -name 'kustomization.yaml' -print0 \
+            | xargs -0 kubeconform -strict -summary
+
+      - name: Validate kustomize builds
+        run: |
+          kubectl kustomize k8s/redis/ | kubeconform -strict -summary -
+          kubectl kustomize multi-instance/k8s/ | kubeconform -strict -summary -

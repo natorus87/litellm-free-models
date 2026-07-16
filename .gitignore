@@ -40,3 +40,11 @@ providers-overlap.txt
 .idea/
 .vscode/
 .DS_Store
+
+# check-config-Validierungsartefakte
+config.check.yaml
+config.check.yaml.bak.*
+.env.k8s.tmp
+
+# Lokale DB-Backups (make backup-db)
+backups/

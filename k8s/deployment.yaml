@@ -7,6 +7,8 @@ metadata:
     app.kubernetes.io/name: litellm-free-models
     app.kubernetes.io/component: proxy
 spec:
+  # Bei replicas > 1 teilen sich die Pods Auth- und Response-Cache über Redis
+  # (enable_redis_auth_cache). Eine podAntiAffinity lohnt erst dann wieder.
   replicas: 1
   selector:
     matchLabels:
@@ -17,26 +19,16 @@ spec:
         app: litellm-proxy
         app.kubernetes.io/name: litellm-free-models
         app.kubernetes.io/component: proxy
-      annotations:
-        prometheus.io/scrape: "true"
-        prometheus.io/port: "4000"
     spec:
-      # Spread pods across nodes for HA
-      affinity:
-        podAntiAffinity:
-          preferredDuringSchedulingIgnoredDuringExecution:
-            - weight: 100
-              podAffinityTerm:
-                labelSelector:
-                  matchExpressions:
-                    - key: app
-                      operator: In
-                      values:
-                        - litellm-proxy
-                topologyKey: kubernetes.io/hostname
+      securityContext:
+        seccompProfile:
+          type: RuntimeDefault
       containers:
         - name: litellm-proxy
-          image: ghcr.io/berriai/litellm:main-latest
+          # Gepinnte Version statt wanderndem main-latest (Reproduzierbarkeit;
+          # main-latest + IfNotPresent liesse jeden Node auf anderem Stand
+          # laufen). Update bewusst via Tag-Bump.
+          image: ghcr.io/berriai/litellm:main-v1.83.14-stable
           imagePullPolicy: IfNotPresent
           args:
             - "--config"
@@ -48,8 +40,39 @@ spec:
               containerPort: 4000
               protocol: TCP
           envFrom:
+            # Provider-API-Keys; von `make k8s-secret` aus .env erzeugt
+            # (explizite Key-Allowlist, enthaelt KEINE REDIS_*/POSTGRES_*).
             - secretRef:
                 name: litellm-secrets
+          env:
+            # Redis cache (resolved by LiteLLM via os.environ/REDIS_* in
+            # config.yaml). REDIS_PASSWORD kommt ausschliesslich aus
+            # litellm-redis-secret (Single Source; `make k8s-secret`
+            # erzeugt es aus .env – Rotation: .env aendern + make k8s-secret
+            # + make k8s-restart).
+            - name: REDIS_HOST
+              value: "litellm-redis"
+            - name: REDIS_PORT
+              value: "6379"
+            - name: REDIS_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: litellm-redis-secret
+                  key: redis-password
+            # Postgres für Key-Management & Spend-Tracking. $(VAR)-Expansion
+            # funktioniert in env-values (anders als in Probe-Kommandos).
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: litellm-postgres-secret
+                  key: postgres-password
+            - name: DATABASE_URL
+              value: "postgresql://litellm:$(POSTGRES_PASSWORD)@postgres:5432/litellm"
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
           volumeMounts:
             - name: config
               mountPath: /etc/litellm

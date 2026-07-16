@@ -73,7 +73,7 @@ def generate_slave_entries(model_names, slaves):
     for mn in model_names:
         for _name, url, env_var in slaves:
             entries.append(f"  - model_name: {mn}\n")
-            entries.append(f"    litellm_params:\n")
+            entries.append("    litellm_params:\n")
             entries.append(f"      model: openai/{mn}\n")
             entries.append(f"      api_key: os.environ/{env_var}\n")
             entries.append(f"      api_base: {url}\n")

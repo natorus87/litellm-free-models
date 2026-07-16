@@ -1,6 +1,5 @@
 """Tests fuer find-shared-models.py."""
 import unittest
-from pathlib import Path
 
 from tests._loader import load_script
 
@@ -184,6 +183,202 @@ class TestProviderToLitellmMapping(unittest.TestCase):
         for name in fsm.PROVIDER_CONFIGS:
             with self.subTest(provider=name):
                 self.assertIn(name, fsm.PROVIDER_TO_LITELLM)
+
+
+class TestOpenRouterFreeFilter(unittest.TestCase):
+    """OpenRouter listet den Gesamtkatalog — nur Free-Modelle duerfen durch,
+    sonst kann --apply ein PAID-Modell in die Config schreiben."""
+
+    def test_filters_paid_models(self):
+        data = {"data": [
+            {"id": "openai/gpt-oss-120b:free",
+             "pricing": {"prompt": "0", "completion": "0"}},
+            {"id": "zero-priced/model",
+             "pricing": {"prompt": "0", "completion": "0"}},
+            {"id": "anthropic/claude-paid",
+             "pricing": {"prompt": "0.000003", "completion": "0.000015"}},
+            {"id": "broken/pricing", "pricing": {"prompt": "n/a"}},
+            {"id": "no-pricing-field"},
+        ]}
+        out = fsm._filter_free_openrouter(data)
+        self.assertIn("openai/gpt-oss-120b:free", out)
+        self.assertIn("zero-priced/model", out)
+        self.assertNotIn("anthropic/claude-paid", out)
+        self.assertNotIn("broken/pricing", out)
+        # Kein pricing-Feld -> prompt/completion 0 -> gilt als free
+        self.assertIn("no-pricing-field", out)
+
+    def test_free_suffix_always_included(self):
+        data = {"data": [
+            {"id": "x/y:free", "pricing": {"prompt": "0.001", "completion": "0.001"}},
+        ]}
+        self.assertEqual(fsm._filter_free_openrouter(data), ["x/y:free"])
+
+
+class TestCohereModelParsing(unittest.TestCase):
+    """Regression: fruehere Version sammelte die ENDPOINT-Namen
+    ("chat"/"embed") statt der Modellnamen ein."""
+
+    def test_parses_model_names_not_endpoints(self):
+        data = {"models": [
+            {"name": "command-r-plus", "endpoints": ["generate", "chat"]},
+            {"name": "embed-english-v3.0", "endpoints": ["embed"]},
+            {"name": "command-a-03-2025", "endpoints": ["chat"]},
+        ]}
+        out = fsm._parse_cohere_models(data)
+        self.assertEqual(out, ["command-r-plus", "command-a-03-2025"])
+        self.assertNotIn("chat", out)
+        self.assertNotIn("embed", out)
+
+    def test_models_without_endpoints_kept(self):
+        data = {"models": [{"name": "command-r"}]}
+        self.assertEqual(fsm._parse_cohere_models(data), ["command-r"])
+
+
+class TestGoogleModelParsing(unittest.TestCase):
+    def test_filters_non_chat_models(self):
+        data = {"models": [
+            {"name": "models/gemma-4-31b-it",
+             "supportedGenerationMethods": ["generateContent"]},
+            {"name": "models/embedding-001",
+             "supportedGenerationMethods": ["embedContent"]},
+            {"name": "models/no-methods-field"},
+        ]}
+        out = fsm._parse_google_models(data)
+        self.assertEqual(out, ["gemma-4-31b-it", "no-methods-field"])
+
+
+class TestGithubModelParsing(unittest.TestCase):
+    def test_handles_bare_list_response(self):
+        data = [{"name": "Meta-Llama-3.3-70B-Instruct"}, {"id": "Mistral-large-2411"}]
+        out = fsm._parse_github_models(data)
+        self.assertEqual(out, ["Meta-Llama-3.3-70B-Instruct", "Mistral-large-2411"])
+
+    def test_handles_dict_response(self):
+        data = {"data": [{"id": "model-a"}]}
+        self.assertEqual(fsm._parse_github_models(data), ["model-a"])
+
+
+class TestGenerateApplyPlan(unittest.TestCase):
+    """Regression: Gruppen sind normalisiert benannt ("3-3-70b"), das
+    Template nutzt sprechende Namen ("llama-3.3-70b-instruct"). Ohne
+    Mapping wurden bestehende Deployments als "add" unter dem
+    normalisierten Namen geplant -> Duplikat-Bloecke."""
+
+    def _existing(self):
+        return {
+            "llama-3.3-70b-instruct": [
+                {"provider": "openrouter",
+                 "model_id": "openrouter/meta-llama/llama-3.3-70b-instruct:free",
+                 "ic": 0.0, "oc": 0.0, "line_start": 0, "line_end": 0},
+            ],
+        }
+
+    def test_existing_deployment_is_skipped_not_added(self):
+        group_norm = fsm.normalize("meta-llama/llama-3.3-70b-instruct:free")
+        groups = {group_norm: {
+            "openrouter": ["meta-llama/llama-3.3-70b-instruct:free"],
+        }}
+        plan = fsm.generate_apply_plan(groups, {}, self._existing(), None)
+        self.assertEqual(len(plan), 1)
+        self.assertEqual(plan[0]["action"], "skip")
+        # Und unter dem TEMPLATE-Namen, nicht dem normalisierten
+        self.assertEqual(plan[0]["model_name"], "llama-3.3-70b-instruct")
+
+    def test_new_provider_added_under_template_name(self):
+        group_norm = fsm.normalize("meta-llama/llama-3.3-70b-instruct:free")
+        groups = {group_norm: {
+            "openrouter": ["meta-llama/llama-3.3-70b-instruct:free"],
+            "groq": ["llama-3.3-70b-versatile"],
+        }}
+        plan = fsm.generate_apply_plan(groups, {}, self._existing(), None)
+        adds = [p for p in plan if p["action"] == "add"]
+        self.assertEqual(len(adds), 1)
+        self.assertEqual(adds[0]["provider"], "groq")
+        self.assertEqual(adds[0]["model_name"], "llama-3.3-70b-instruct")
+
+    def test_globally_existing_deployment_never_readded(self):
+        # Gleiches Deployment taucht in einer ANDERS normalisierten Gruppe
+        # auf -> darf trotzdem nicht erneut vorgeschlagen werden.
+        groups = {"some-other-norm": {
+            "openrouter": ["meta-llama/llama-3.3-70b-instruct:free"],
+        }}
+        plan = fsm.generate_apply_plan(groups, {}, self._existing(), None)
+        self.assertTrue(all(p["action"] == "skip" for p in plan))
+
+
+class TestNativeModelId(unittest.TestCase):
+    def test_prefix_stripping(self):
+        cases = {
+            "openrouter/openai/gpt-oss-120b:free": "openai/gpt-oss-120b:free",
+            "cerebras/gpt-oss-120b": "gpt-oss-120b",
+            "openai/openai/gpt-oss-120b": "openai/gpt-oss-120b",
+            "huggingface/meta-llama/Llama-3.3-70B-Instruct": "meta-llama/Llama-3.3-70B-Instruct",
+            "cloudflare/@cf/openai/gpt-oss-120b": "@cf/openai/gpt-oss-120b",
+            "no-prefix": "no-prefix",
+        }
+        for model_id, expected in cases.items():
+            with self.subTest(model_id=model_id):
+                self.assertEqual(fsm._native_model_id(model_id), expected)
+
+
+class TestFindStaleDeployments(unittest.TestCase):
+    def _template(self, tmpdir):
+        from pathlib import Path
+        p = Path(tmpdir) / "tmpl.yaml"
+        p.write_text(
+            "model_list:\n"
+            "\n"
+            "  - model_name: gpt-oss-120b\n"
+            "    litellm_params:\n"
+            "      model: cerebras/gpt-oss-120b\n"
+            "      api_key: {{CEREBRAS_API_KEY}}\n"
+            "\n"
+            "  - model_name: gpt-oss-120b\n"
+            "    litellm_params:\n"
+            "      model: groq/openai/gpt-oss-120b\n"
+            "      api_key: {{GROQ_API_KEY}}\n"
+            "\n"
+            "  - model_name: openrouter-free\n"
+            "    litellm_params:\n"
+            "      model: openrouter/openrouter/free\n"
+            "      api_key: {{OPENROUTER_API_KEY}}\n"
+        )
+        return p
+
+    def test_detects_missing_model(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as d:
+            tmpl = self._template(d)
+            raw = {
+                "cerebras": ["llama-4-maverick"],          # gpt-oss fehlt -> stale
+                "groq": ["openai/gpt-oss-120b"],           # vorhanden
+                "openrouter": ["whatever:free"],           # exempt (openrouter-free)
+            }
+            stale = fsm.find_stale_deployments(tmpl, raw, partial=set())
+            self.assertEqual(len(stale), 1)
+            self.assertEqual(stale[0]["provider"], "cerebras")
+            self.assertEqual(stale[0]["native_id"], "gpt-oss-120b")
+
+    def test_skips_partial_and_empty_and_failed_catalogs(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as d:
+            tmpl = self._template(d)
+            raw = {
+                "cerebras": [],                      # leer -> uebersprungen
+                "groq": ["something-else"],          # partial -> uebersprungen
+                # openrouter fehlt (Fetch fehlgeschlagen) -> uebersprungen
+            }
+            stale = fsm.find_stale_deployments(tmpl, raw, partial={"groq"})
+            self.assertEqual(stale, [])
+
+    def test_case_insensitive_match(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as d:
+            tmpl = self._template(d)
+            raw = {"cerebras": ["GPT-OSS-120B"]}
+            stale = fsm.find_stale_deployments(tmpl, raw, partial=set())
+            self.assertEqual(stale, [])
 
 
 if __name__ == "__main__":

@@ -1,0 +1,88 @@
+# =============================================================================
+# Postgres – Nightly Backup (pg_dump) CronJob
+# =============================================================================
+# Postgres ist der einzige persistente Zustand des Stacks (Virtual Keys,
+# Spend-Tracking, Team-/User-Zuordnungen). Ein kaputtes PVC ohne Backup
+# bedeutet: alle ausgegebenen API-Keys sind weg.
+#
+# Dieser CronJob schreibt taeglich um 03:30 UTC einen pg_dump (custom format)
+# in ein separates PVC und behaelt die letzten 7 Dumps.
+#
+# Restore (siehe auch README "Backup & Restore"):
+#   kubectl -n litellm-free-models run pg-restore --rm -it --restart=Never \
+#     --image=postgres:16-alpine --overrides='...' -- \
+#     pg_restore -h postgres -U litellm -d litellm --clean /backups/<dump>
+# =============================================================================
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: postgres-backup
+  namespace: litellm-free-models
+  labels:
+    app.kubernetes.io/name: litellm-free-models
+    app.kubernetes.io/component: database-backup
+spec:
+  schedule: "30 3 * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 2
+      template:
+        metadata:
+          labels:
+            app: postgres-backup
+            app.kubernetes.io/name: litellm-free-models
+            # component "proxy"-aehnlich benannt, damit die NetworkPolicy
+            # postgres-only-from-litellm den Zugriff auf Postgres erlaubt
+            app.kubernetes.io/component: proxy
+        spec:
+          restartPolicy: OnFailure
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 70
+            runAsGroup: 70
+            fsGroup: 70
+            seccompProfile:
+              type: RuntimeDefault
+          containers:
+            - name: pg-dump
+              image: postgres:16-alpine
+              env:
+                - name: PGPASSWORD
+                  valueFrom:
+                    secretKeyRef:
+                      name: litellm-postgres-secret
+                      key: postgres-password
+              command:
+                - "sh"
+                - "-c"
+                - |
+                  set -eu
+                  ts=$(date +%Y%m%d-%H%M%S)
+                  pg_dump -h postgres -U litellm -d litellm -F c \
+                    -f "/backups/litellm-${ts}.dump"
+                  echo "Backup geschrieben: litellm-${ts}.dump"
+                  # Nur die letzten 7 Dumps behalten
+                  ls -1t /backups/litellm-*.dump | tail -n +8 | xargs -r rm -f --
+                  echo "Vorhandene Backups:"; ls -lh /backups/
+              securityContext:
+                allowPrivilegeEscalation: false
+                capabilities:
+                  drop:
+                    - ALL
+              resources:
+                requests:
+                  cpu: 100m
+                  memory: 128Mi
+                limits:
+                  cpu: 500m
+                  memory: 256Mi
+              volumeMounts:
+                - name: backups
+                  mountPath: /backups
+          volumes:
+            - name: backups
+              persistentVolumeClaim:
+                claimName: postgres-backups

@@ -1,0 +1,108 @@
+# =============================================================================
+# Redis – Shared Cache Deployment
+# =============================================================================
+# Used by BOTH the single-instance setup (make k8s-apply) and the
+# multi-instance setup (multi-instance/k8s/kustomization.yaml references
+# this directory as a kustomize base). Edit here, never copy.
+#
+# Redis runs as a pure LRU cache WITHOUT persistence (--save ""): cache data
+# is disposable and re-warms itself, so no PVC is needed and there are no
+# BGSAVE forks (whose copy-on-write pages would otherwise require extra
+# memory headroom).
+# =============================================================================
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: litellm-redis
+  namespace: litellm-free-models
+  labels:
+    app.kubernetes.io/name: litellm-free-models
+    app.kubernetes.io/component: cache
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: litellm-redis
+  template:
+    metadata:
+      labels:
+        app: litellm-redis
+        app.kubernetes.io/name: litellm-free-models
+        app.kubernetes.io/component: cache
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 999
+        runAsGroup: 999
+        fsGroup: 999
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: redis
+          image: redis:7-alpine
+          args:
+            - "redis-server"
+            - "--requirepass"
+            - "$(REDIS_PASSWORD)"
+            - "--maxmemory"
+            - "256mb"
+            - "--maxmemory-policy"
+            - "allkeys-lru"
+            # Pure cache: no RDB snapshots, no persistence.
+            - "--save"
+            - ""
+          ports:
+            - name: redis
+              containerPort: 6379
+              protocol: TCP
+          env:
+            - name: REDIS_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: litellm-redis-secret
+                  key: redis-password
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+          resources:
+            requests:
+              cpu: 100m
+              # Requests must cover maxmemory, limits need headroom for
+              # allocator fragmentation and client buffers.
+              memory: 256Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+          # NOTE: kubelet does NOT expand $(VAR) from secretKeyRef env vars in
+          # probe exec commands (kubernetes/kubernetes#40846). A shell is
+          # required so the real env var is used; -e makes redis-cli exit
+          # non-zero on error replies like NOAUTH.
+          livenessProbe:
+            exec:
+              command:
+                - "sh"
+                - "-c"
+                - 'redis-cli -a "$REDIS_PASSWORD" -e ping'
+            initialDelaySeconds: 15
+            periodSeconds: 30
+            timeoutSeconds: 5
+          readinessProbe:
+            exec:
+              command:
+                - "sh"
+                - "-c"
+                - 'redis-cli -a "$REDIS_PASSWORD" -e ping'
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 3
+          volumeMounts:
+            # Writable workdir (readOnlyRootFilesystem is enabled); ephemeral
+            # on purpose – this Redis is a cache, not a datastore.
+            - name: data
+              mountPath: /data
+      volumes:
+        - name: data
+          emptyDir: {}

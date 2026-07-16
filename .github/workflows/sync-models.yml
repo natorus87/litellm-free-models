@@ -1,18 +1,35 @@
-name: Sync Free Models (weekly report)
+# =============================================================================
+# Sync Free Models – wöchentliche PR-Pipeline
+# =============================================================================
+# Fragt die Provider-Kataloge ab, wendet erkannte Ergänzungen via
+# `find-shared-models.py --apply` auf config.template.yaml an, regeneriert
+# config.yaml + multi-instance-Configs + Doku-Matrix und öffnet einen PR.
+#
+# - Läuft NUR mit Provider-Keys aus GitHub Secrets (separate, least-privilege
+#   Free-Tier-Keys nur für die read-only Katalog-Abfragen verwenden!).
+#   Ohne Keys schlägt der Run laut fehl, statt still einen lückenhaften
+#   Report zu erzeugen.
+# - Kein Auto-Merge: Modell-Änderungen betreffen Routing/Fallbacks und
+#   brauchen einen menschlichen Blick.
+# - Konservativ bei Entfernungen: --apply fügt nur hinzu bzw. aktualisiert
+#   Kosten; Modell-ENTFERNUNGEN bleiben bewusst manuell (Kataloge flappen
+#   wochenweise, vgl. gemma-3-12b-it-Historie).
+# =============================================================================
+name: Sync Free Models (weekly PR)
 
 on:
   schedule:
     # Every Monday at 06:00 UTC
     - cron: "0 6 * * 1"
   workflow_dispatch:
-    description: "Trigger a one-off provider-overlap report"
 
 permissions:
-  contents: read
+  contents: write
+  pull-requests: write
 
 jobs:
-  report:
-    name: generate provider-overlap report
+  sync:
+    name: sync provider catalogs & open PR
     runs-on: ubuntu-latest
 
     steps:
@@ -24,13 +41,121 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Generate provider-overlap report (no pricing, no --apply)
-        run: python3 find-shared-models.py --no-pricing
+      - name: Build .env from GitHub Secrets
+        env:
+          OPENROUTER_API_KEY: ${{ secrets.SYNC_OPENROUTER_API_KEY }}
+          CEREBRAS_API_KEY: ${{ secrets.SYNC_CEREBRAS_API_KEY }}
+          GROQ_API_KEY: ${{ secrets.SYNC_GROQ_API_KEY }}
+          CLOUDFLARE_API_KEY: ${{ secrets.SYNC_CLOUDFLARE_API_KEY }}
+          CLOUDFLARE_API_BASE: ${{ secrets.SYNC_CLOUDFLARE_API_BASE }}
+          GEMINI_API_KEY: ${{ secrets.SYNC_GEMINI_API_KEY }}
+          NVIDIA_API_KEY: ${{ secrets.SYNC_NVIDIA_API_KEY }}
+          MISTRAL_API_KEY: ${{ secrets.SYNC_MISTRAL_API_KEY }}
+          COHERE_API_KEY: ${{ secrets.SYNC_COHERE_API_KEY }}
+          MODELS_GITHUB_TOKEN: ${{ secrets.SYNC_GITHUB_MODELS_TOKEN }}
+          OPENCODE_ZEN_API_KEY: ${{ secrets.SYNC_OPENCODE_ZEN_API_KEY }}
+          LLM7IO_API_KEY: ${{ secrets.SYNC_LLM7IO_API_KEY }}
+          HF_TOKEN: ${{ secrets.SYNC_HF_TOKEN }}
+        run: |
+          {
+            echo "LITELLM_MASTER_KEY=sk-ci-sync"
+            echo "REDIS_HOST=redis"
+            echo "REDIS_PASSWORD=ci-sync-dummy"
+            echo "POSTGRES_PASSWORD=ci-sync-dummy"
+            [ -n "$OPENROUTER_API_KEY" ]   && echo "OPENROUTER_API_KEY=$OPENROUTER_API_KEY"
+            [ -n "$CEREBRAS_API_KEY" ]     && echo "CEREBRAS_API_KEY=$CEREBRAS_API_KEY"
+            [ -n "$GROQ_API_KEY" ]         && echo "GROQ_API_KEY=$GROQ_API_KEY"
+            [ -n "$CLOUDFLARE_API_KEY" ]   && echo "CLOUDFLARE_API_KEY=$CLOUDFLARE_API_KEY"
+            [ -n "$CLOUDFLARE_API_BASE" ]  && echo "CLOUDFLARE_API_BASE=$CLOUDFLARE_API_BASE"
+            [ -n "$GEMINI_API_KEY" ]       && echo "GEMINI_API_KEY=$GEMINI_API_KEY"
+            [ -n "$NVIDIA_API_KEY" ]       && echo "NVIDIA_API_KEY=$NVIDIA_API_KEY"
+            [ -n "$MISTRAL_API_KEY" ]      && echo "MISTRAL_API_KEY=$MISTRAL_API_KEY"
+            [ -n "$COHERE_API_KEY" ]       && echo "COHERE_API_KEY=$COHERE_API_KEY"
+            [ -n "$MODELS_GITHUB_TOKEN" ]  && echo "GITHUB_TOKEN=$MODELS_GITHUB_TOKEN"
+            [ -n "$OPENCODE_ZEN_API_KEY" ] && echo "OPENCODE_ZEN_API_KEY=$OPENCODE_ZEN_API_KEY"
+            [ -n "$LLM7IO_API_KEY" ]       && echo "LLM7IO_API_KEY=$LLM7IO_API_KEY"
+            [ -n "$HF_TOKEN" ]             && echo "HF_TOKEN=$HF_TOKEN"
+            true
+          } > .env
+          # llm7io/huggingface/ovhcloud laufen auch ohne Key – aber ohne
+          # jegliche Provider-Secrets ist der Report systematisch
+          # unvollstaendig. Dann lieber laut fehlschlagen (V11).
+          key_count=$(grep -cE '_API_KEY=|_TOKEN=' .env || true)
+          if [ "$key_count" -lt 3 ]; then
+            echo "::error::Zu wenige Provider-Keys als SYNC_*-Secrets hinterlegt ($key_count gefunden)."
+            echo "::error::Ohne Keys ist der Katalog-Abgleich systematisch unvollstaendig – Secrets anlegen (siehe Workflow-Header)."
+            exit 1
+          fi
+          echo "$key_count Provider-Keys konfiguriert."
 
-      - name: Upload providers-overlap.txt
-        uses: actions/upload-artifact@v4
+      - name: Run catalog sync (--apply + regen)
+        run: |
+          python3 find-shared-models.py --apply --regen-multi-instance
+
+      - name: Regenerate docs matrix
+        run: python3 find-shared-models.py --write-docs
+
+      # ── Gates: nur ein grüner Stand erreicht den Reviewer ──────────────────
+      - name: Gate – lint
+        run: |
+          pip install ruff
+          ruff check .
+
+      - name: Gate – tests (inkl. Config-Invarianten)
+        run: make test
+
+      - name: Gate – render smoke
+        run: |
+          python3 render-config.py --dry-run
+          python3 render-config.py --no-redis --output config.check.yaml
+
+      - name: Gate – manifest validation
+        run: |
+          curl -sSL https://github.com/yannh/kubeconform/releases/latest/download/kubeconform-linux-amd64.tar.gz \
+            | sudo tar xz -C /usr/local/bin kubeconform
+          find k8s multi-instance/k8s -name '*.yaml' \
+            ! -name '*.template' ! -name 'kustomization.yaml' -print0 \
+            | xargs -0 kubeconform -strict -summary
+
+      - name: Prepare PR body
+        run: |
+          {
+            echo "Wöchentlicher Provider-Katalog-Sync (\`find-shared-models.py --apply\`)."
+            echo
+            echo "- ✅ Gates: ruff, Unit-/Invarianten-Tests, Render-Smoke, kubeconform"
+            echo "- ⚠️ Kein Auto-Merge – Routing-/Fallback-Änderungen bitte reviewen."
+            echo "- ℹ️ \`--apply\` fügt nur hinzu / aktualisiert Kosten. Modell-Entfernungen"
+            echo "  bleiben manuell (Flapping-Schutz)."
+            echo
+            echo "<details><summary>providers-overlap.txt (gekürzt)</summary>"
+            echo
+            echo '```'
+            head -c 60000 providers-overlap.txt || echo "(kein Report erzeugt)"
+            echo '```'
+            echo "</details>"
+          } > /tmp/pr-body.md
+
+      # Generierte/lokale Dateien nicht in den PR aufnehmen
+      - name: Clean workspace for PR
+        run: |
+          rm -f .env config.check.yaml providers-overlap.txt
+          rm -f config.yaml.bak.* multi-instance/master/config.yaml.bak.*
+          git checkout -- .github/ 2>/dev/null || true
+
+      - name: Create Pull Request
+        uses: peter-evans/create-pull-request@v7
         with:
-          name: providers-overlap
-          path: providers-overlap.txt
-          retention-days: 7
-          if-no-files-found: warn
+          branch: sync/free-models
+          delete-branch: true
+          commit-message: "feat(sync): update free-model catalog (weekly sync)"
+          title: "Weekly free-model catalog sync"
+          body-path: /tmp/pr-body.md
+          labels: |
+            dependencies
+            models-sync
+          # NUR Template + Doku: config.yaml und die multi-instance-Outputs
+          # sind generiert, gitignored und enthalten eingesetzte API-Keys.
+          add-paths: |
+            config.template.yaml
+            AGENTS.md
+            README.md

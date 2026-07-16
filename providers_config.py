@@ -24,17 +24,16 @@ Schema pro Provider:
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Optional
 
 
 @dataclass(frozen=True)
 class ProviderConfig:
     name: str
     prefix: str
-    env_var: Optional[str]
+    env_var: str | None
     required: bool
-    api_base_env: Optional[str]
-    api_base_static: Optional[str]
+    api_base_env: str | None
+    api_base_static: str | None
     rpm: int
     tpm: int
     needs_api_base: bool
@@ -126,7 +125,7 @@ def get(name: str) -> ProviderConfig:
     return PROVIDERS[name]
 
 
-def find_by_litellm_prefix_and_vendor(prefix: str, vendor: Optional[str]) -> Optional[ProviderConfig]:
+def find_by_litellm_prefix_and_vendor(prefix: str, vendor: str | None) -> ProviderConfig | None:
     """
     Mappt (prefix, vendor) -> ProviderConfig. None wenn nicht gefunden.
     Beispiel: ('openai', 'openai') -> nvidia (vendor_in_path)

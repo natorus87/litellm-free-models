@@ -1,7 +1,7 @@
 """Tests fuer providers_config.py."""
 import unittest
 
-from providers_config import PROVIDERS, ProviderConfig, get, find_by_litellm_prefix_and_vendor
+from providers_config import PROVIDERS, ProviderConfig, get
 
 
 class TestProviderConfigShape(unittest.TestCase):

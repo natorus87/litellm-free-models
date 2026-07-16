@@ -1,5 +1,3 @@
-version: "3.9"
-
 # =============================================================================
 # Multi-Instance LiteLLM Setup
 # =============================================================================
@@ -17,10 +15,17 @@ version: "3.9"
 #
 # Prerequisites:
 #   1. python3 generate-config.py        # creates master/config.yaml
-#   2. cp master/.env.example master/.env   # fill in master's keys
-#   3. cp slave1/.env.example slave1/.env   # fill in slave1's keys
-#   4. cp slave2/.env.example slave2/.env   # fill in slave2's keys
-#   5. docker compose up -d
+#   2. cp .env.example .env                 # shared infra (Redis/Postgres passwords)
+#   3. cp master/.env.example master/.env   # fill in master's keys
+#   4. cp slave1/.env.example slave1/.env   # fill in slave1's keys
+#   5. cp slave2/.env.example slave2/.env   # fill in slave2's keys
+#   6. docker compose up -d
+#
+# NOTE on .env files: Docker Compose interpolates ${VAR} expressions in this
+# file ONLY from the shell environment or the project-level .env (step 2) –
+# NEVER from the per-service env_file entries. Redis/Postgres passwords
+# therefore live in ./.env; the per-instance .env files carry only the
+# provider API keys.
 # =============================================================================
 
 services:
@@ -29,7 +34,8 @@ services:
     container_name: litellm-postgres
     environment:
       - POSTGRES_USER=${POSTGRES_USER:-litellm}
-      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-litellm}
+      # No default on purpose: set POSTGRES_PASSWORD in ./.env (see .env.example)
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in multi-instance/.env}
       - POSTGRES_DB=${POSTGRES_DB:-litellm}
     volumes:
       - postgres-data:/var/lib/postgresql/data
@@ -43,16 +49,52 @@ services:
       - litellm-multi
     restart: unless-stopped
 
+  # ─── Shared Redis Cache ────────────────────────────────────────────────────
+  # Single Redis instance, shared by master + all slaves. Identical prompts
+  # hit cache instead of upstream providers; virtual-key lookups are also
+  # shared across replicas (see enable_redis_auth_cache in config.yaml).
+  redis:
+    image: redis:7-alpine
+    container_name: litellm-redis
+    # Kein Passwort-Default: REDIS_PASSWORD muss in ./.env gesetzt sein
+    # (siehe .env.example). --save "" = reiner LRU-Cache ohne Persistenz.
+    command:
+      - "redis-server"
+      - "--port"
+      - "${REDIS_PORT:-6379}"
+      - "--requirepass"
+      - "${REDIS_PASSWORD:?REDIS_PASSWORD must be set in multi-instance/.env}"
+      - "--maxmemory"
+      - "256mb"
+      - "--maxmemory-policy"
+      - "allkeys-lru"
+      - "--save"
+      - ""
+    healthcheck:
+      # -e: Exit-Code != 0 bei Error-Replies (z.B. NOAUTH)
+      test: ["CMD", "redis-cli", "-p", "${REDIS_PORT:-6379}", "-a", "${REDIS_PASSWORD:?REDIS_PASSWORD must be set in multi-instance/.env}", "-e", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+    networks:
+      - litellm-multi
+    restart: unless-stopped
+
   # ─── Master Instance ────────────────────────────────────────────────────────
   master:
-    image: ghcr.io/berriai/litellm:main-latest
+    image: ghcr.io/berriai/litellm:main-v1.83.14-stable
     container_name: litellm-master
     ports:
       - "4000:4000"  # Clients call the master on port 4000
     env_file: ./master/.env
     environment:
       # PostgreSQL Database URL for LiteLLM (key management, spend tracking, etc.)
-      - DATABASE_URL=postgresql://${POSTGRES_USER:-litellm}:${POSTGRES_PASSWORD:-litellm}@postgres:5432/${POSTGRES_DB:-litellm}
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-litellm}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in multi-instance/.env}@postgres:5432/${POSTGRES_DB:-litellm}
+      # Redis cache (resolved by LiteLLM via os.environ/REDIS_* in config.yaml)
+      - REDIS_HOST=redis
+      - REDIS_PORT=${REDIS_PORT:-6379}
+      - REDIS_PASSWORD=${REDIS_PASSWORD:?REDIS_PASSWORD must be set in multi-instance/.env}
     volumes:
       - ./master/config.yaml:/app/config.yaml:ro
     command: ["--config", "/app/config.yaml", "--port", "4000"]
@@ -68,17 +110,23 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      redis:
+        condition: service_healthy
 
   # ─── Slave 1 Instance ──────────────────────────────────────────────────────
   slave1:
-    image: ghcr.io/berriai/litellm:main-latest
+    image: ghcr.io/berriai/litellm:main-v1.83.14-stable
     container_name: litellm-slave1
     ports:
       - "4001:4000"  # Slave 1 on host port 4001
     env_file: ./slave1/.env
     environment:
       # PostgreSQL Database URL for LiteLLM (key management, spend tracking, etc.)
-      - DATABASE_URL=postgresql://${POSTGRES_USER:-litellm}:${POSTGRES_PASSWORD:-litellm}@postgres:5432/${POSTGRES_DB:-litellm}
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-litellm}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in multi-instance/.env}@postgres:5432/${POSTGRES_DB:-litellm}
+      # Redis cache (shared with master + slave2)
+      - REDIS_HOST=redis
+      - REDIS_PORT=${REDIS_PORT:-6379}
+      - REDIS_PASSWORD=${REDIS_PASSWORD:?REDIS_PASSWORD must be set in multi-instance/.env}
     volumes:
       # Uses the SAME base config.yaml as the standalone setup
       - ../config.yaml:/app/config.yaml:ro
@@ -95,17 +143,23 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      redis:
+        condition: service_healthy
 
   # ─── Slave 2 Instance ──────────────────────────────────────────────────────
   slave2:
-    image: ghcr.io/berriai/litellm:main-latest
+    image: ghcr.io/berriai/litellm:main-v1.83.14-stable
     container_name: litellm-slave2
     ports:
       - "4002:4000"  # Slave 2 on host port 4002
     env_file: ./slave2/.env
     environment:
       # PostgreSQL Database URL for LiteLLM (key management, spend tracking, etc.)
-      - DATABASE_URL=postgresql://${POSTGRES_USER:-litellm}:${POSTGRES_PASSWORD:-litellm}@postgres:5432/${POSTGRES_DB:-litellm}
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-litellm}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in multi-instance/.env}@postgres:5432/${POSTGRES_DB:-litellm}
+      # Redis cache (shared with master + slave1)
+      - REDIS_HOST=redis
+      - REDIS_PORT=${REDIS_PORT:-6379}
+      - REDIS_PASSWORD=${REDIS_PASSWORD:?REDIS_PASSWORD must be set in multi-instance/.env}
     volumes:
       # Uses the SAME base config.yaml as the standalone setup
       - ../config.yaml:/app/config.yaml:ro
@@ -121,6 +175,8 @@ services:
       - litellm-multi
     depends_on:
       postgres:
+        condition: service_healthy
+      redis:
         condition: service_healthy
 
 networks:

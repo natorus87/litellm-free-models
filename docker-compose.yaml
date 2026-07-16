@@ -1,5 +1,3 @@
-version: "3.9"
-
 # Hinweis: Vor `docker compose up` muss die config.yaml aus dem Template
 # gerendert werden. Das passiert automatisch via Makefile-Target
 # `docker-compose-up` (das `render-config` aufruft), oder manuell:
@@ -12,7 +10,9 @@ services:
     container_name: litellm-postgres
     environment:
       - POSTGRES_USER=${POSTGRES_USER:-litellm}
-      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-litellm}
+      # No default on purpose: a silently ignored password is worse than a
+      # hard startup error. Set POSTGRES_PASSWORD in .env (see .env.example).
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in .env}
       - POSTGRES_DB=${POSTGRES_DB:-litellm}
     volumes:
       - postgres-data:/var/lib/postgresql/data
@@ -26,12 +26,44 @@ services:
       - litellm-network
     restart: unless-stopped
 
+  redis:
+    image: redis:7-alpine
+    container_name: litellm-redis
+    # --requirepass erzwingt Passwort-Auth. Kein Default: REDIS_PASSWORD muss
+    # in .env gesetzt sein (siehe .env.example), sonst schlaegt der Start
+    # laut fehl statt still mit einem bekannten Default-Passwort zu laufen.
+    # --save "" = reiner LRU-Cache ohne Persistenz (Cache-Daten sind
+    # verzichtbar und waermen sich selbst wieder auf; keine BGSAVE-Forks).
+    command:
+      - "redis-server"
+      - "--port"
+      - "${REDIS_PORT:-6379}"
+      - "--requirepass"
+      - "${REDIS_PASSWORD:?REDIS_PASSWORD must be set in .env}"
+      - "--maxmemory"
+      - "256mb"
+      - "--maxmemory-policy"
+      - "allkeys-lru"
+      - "--save"
+      - ""
+    healthcheck:
+      # -e: Exit-Code != 0 bei Error-Replies (z.B. NOAUTH), sonst ist der
+      # Healthcheck auch bei kaputter Auth immer gruen.
+      test: ["CMD", "redis-cli", "-p", "${REDIS_PORT:-6379}", "-a", "${REDIS_PASSWORD:?REDIS_PASSWORD must be set in .env}", "-e", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+    networks:
+      - litellm-network
+    restart: unless-stopped
+
   litellm-proxy:
     build:
       context: .
       dockerfile: Dockerfile
     # OR use the official image without a custom Dockerfile:
-    # image: ghcr.io/berriai/litellm:main-latest
+    # image: ghcr.io/berriai/litellm:main-v1.83.14-stable
     container_name: litellm-free-models
     ports:
       - "4444:4000"  # LiteLLM proxy port
@@ -52,7 +84,11 @@ services:
       - LLM7IO_API_KEY=${LLM7IO_API_KEY}
       - HF_TOKEN=${HF_TOKEN}
       # PostgreSQL Database URL for LiteLLM (key management, spend tracking, etc.)
-      - DATABASE_URL=postgresql://${POSTGRES_USER:-litellm}:${POSTGRES_PASSWORD:-litellm}@postgres:5432/${POSTGRES_DB:-litellm}
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-litellm}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in .env}@postgres:5432/${POSTGRES_DB:-litellm}
+      # Redis (resolved by LiteLLM via os.environ/REDIS_* in config.yaml)
+      - REDIS_HOST=redis
+      - REDIS_PORT=${REDIS_PORT:-6379}
+      - REDIS_PASSWORD=${REDIS_PASSWORD:?REDIS_PASSWORD must be set in .env}
     volumes:
       # Mount the config file so you can edit without rebuilding
       - ./config.yaml:/app/config.yaml:ro
@@ -68,6 +104,8 @@ services:
       - litellm-network
     depends_on:
       postgres:
+        condition: service_healthy
+      redis:
         condition: service_healthy
 
 networks:

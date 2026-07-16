@@ -17,7 +17,9 @@ repos:
     rev: v0.6.9
     hooks:
       - id: ruff
-        args: ["--fix", "--ignore=E501,W503,E402"]
+        # Ignore-Regeln zentral in pyproject.toml ([tool.ruff.lint]) –
+        # W503 existiert in ruff nicht und liess den Hook frueher crashen.
+        args: ["--fix"]
       - id: ruff-format
 
   - repo: local

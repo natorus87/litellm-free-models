@@ -1,8 +1,6 @@
 """Tests fuer multi-instance/generate-config.py."""
 import importlib.util
-import os
 import sys
-import tempfile
 import textwrap
 import unittest
 from pathlib import Path

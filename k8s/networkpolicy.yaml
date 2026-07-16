@@ -1,0 +1,65 @@
+# =============================================================================
+# NetworkPolicies – Redis & Postgres nur für LiteLLM-Pods erreichbar
+# =============================================================================
+# Ohne diese Policies kann jeder Pod im Namespace Redis (nur Passwort-
+# geschützt) und Postgres direkt ansprechen. Die LiteLLM-Pods selbst
+# bleiben unbeschränkt (sie brauchen Egress zu den Provider-APIs und
+# Ingress vom Service/Ingress-Controller).
+#
+# Benötigt einen CNI mit NetworkPolicy-Support (Calico, Cilium, …).
+# =============================================================================
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: redis-only-from-litellm
+  namespace: litellm-free-models
+  labels:
+    app.kubernetes.io/name: litellm-free-models
+    app.kubernetes.io/component: cache
+spec:
+  podSelector:
+    matchLabels:
+      app: litellm-redis
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchExpressions:
+              - key: app.kubernetes.io/component
+                operator: In
+                values:
+                  - proxy
+                  - master
+                  - slave
+      ports:
+        - protocol: TCP
+          port: 6379
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: postgres-only-from-litellm
+  namespace: litellm-free-models
+  labels:
+    app.kubernetes.io/name: litellm-free-models
+    app.kubernetes.io/component: database
+spec:
+  podSelector:
+    matchLabels:
+      app: postgres
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchExpressions:
+              - key: app.kubernetes.io/component
+                operator: In
+                values:
+                  - proxy
+                  - master
+                  - slave
+      ports:
+        - protocol: TCP
+          port: 5432

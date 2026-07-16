@@ -5,14 +5,21 @@ Rendert config.template.yaml zu config.yaml.
   1. Liest .env und ersetzt {{ENV_VAR}} Platzhalter im Template.
   2. Filtert Provider-Deployments raus, deren API-Key fehlt (ausser
      anonymer Free-Tier wie OVHcloud).
-  3. Wenn OPENROUTER_API_KEY gesetzt ist, wird `openrouter-free` an jede
+  3. Entfernt die Redis-Bloecke (Cache + Router-Tracking, markiert mit
+     `# BEGIN REDIS ...` / `# END REDIS ...`), wenn REDIS_HOST fehlt/leer
+     ist oder --no-redis gesetzt wurde.
+  4. Wenn OPENROUTER_API_KEY gesetzt ist, wird `openrouter-free` an jede
      Fallback-Chain und an den Catch-All `*` angehaengt.
-  4. Schreibt config.yaml atomar mit .bak.<timestamp>-Backup.
+  5. Entfernt Fallback-Eintraege UND Chain-Ziele, die auf nicht (mehr)
+     existierende model_names zeigen.
+  6. Schreibt config.yaml atomar mit .bak.<timestamp>-Backup der vorherigen
+     Version (es werden maximal BACKUP_KEEP Backups behalten).
 
 Nutzung:
     python3 render-config.py
     python3 render-config.py --env .env --template config.template.yaml
     python3 render-config.py --dry-run   # nur stdout, kein Schreiben
+    python3 render-config.py --no-redis  # ohne Cache/Router-Redis rendern
 """
 
 from __future__ import annotations
@@ -24,7 +31,7 @@ import sys
 import time
 from pathlib import Path
 
-from providers_config import PROVIDERS, ProviderConfig
+from providers_config import PROVIDERS
 
 REPO_ROOT = Path(__file__).resolve().parent
 DEFAULT_ENV = REPO_ROOT / ".env"
@@ -36,6 +43,14 @@ DEFAULT_OUTPUT = REPO_ROOT / "config.yaml"
 # sind 3-4 Header-Zeilen; 12 ist grosszuegig bemessen, um auch bei
 # zukuenftigen Erweiterungen robust zu sein.
 MAX_HEADER_LINES = 12
+
+# Anzahl der config.yaml.bak.<timestamp>-Backups, die beim Rendern
+# aufgehoben werden; aeltere werden geloescht.
+BACKUP_KEEP = 5
+
+# model_names, die bewusst nur einen Provider haben (dokumentierte Ausnahmen
+# der >= 2-Provider-Regel) -- fuer diese wird KEINE Warnung ausgegeben.
+SINGLE_PROVIDER_ALLOWED = {"big-pickle", "north-mini-code", "openrouter-free"}
 
 
 def load_env(path: Path) -> dict[str, str]:
@@ -226,10 +241,54 @@ def substitute_placeholders(text: str, env: dict[str, str]) -> tuple[str, list[s
     return re.sub(r"\{\{([A-Z_][A-Z0-9_]*)\}\}", repl, text), missing
 
 
+def single_deployment_warnings(kept_blocks: list[dict]) -> list[str]:
+    """
+    Liefert die model_names, die nach dem Provider-Filter nur noch EIN
+    Deployment haben (ohne die dokumentierten Single-Provider-Ausnahmen).
+    Die >= 2-Provider-Regel gilt nur fuers Template -- fehlen API-Keys,
+    kann ein Modell zur Laufzeit auf einem Bein stehen: faellt der letzte
+    Provider aus (Rate-Limit, Downtime), traegt nur noch die Fallback-Chain.
+    """
+    counts: dict[str, int] = {}
+    for b in kept_blocks:
+        counts[b["model_name"]] = counts.get(b["model_name"], 0) + 1
+    return sorted(
+        mn for mn, c in counts.items()
+        if c == 1 and mn not in SINGLE_PROVIDER_ALLOWED
+    )
+
+
+def strip_redis_blocks(lines: list[str], redis_active: bool) -> list[str]:
+    """
+    Verarbeitet die mit `# BEGIN REDIS ...` / `# END REDIS ...` markierten
+    Bloecke (Cache in litellm_settings, Redis-Tracking in router_settings):
+
+    - redis_active=True:  nur die Marker-Zeilen entfernen, Inhalt bleibt.
+    - redis_active=False: Marker UND Inhalt entfernen – der Proxy laeuft
+      dann ohne Redis, statt gegen ein unerreichbares Redis zu degradieren
+      (Connection-Error-Spam auf jedem Request).
+    """
+    new_lines: list[str] = []
+    in_block = False
+    for line in lines:
+        s = line.strip()
+        if s.startswith("# BEGIN REDIS"):
+            in_block = True
+            continue
+        if s.startswith("# END REDIS"):
+            in_block = False
+            continue
+        if in_block and not redis_active:
+            continue
+        new_lines.append(line)
+    return new_lines
+
+
 def update_fallbacks(
     lines: list[str],
     ml_end: int,
     openrouter_active: bool,
+    valid_model_names: set[str] | None = None,
 ) -> list[str]:
     """
     - Wenn OPENROUTER_API_KEY gesetzt ist: 'openrouter-free' an jede
@@ -237,6 +296,9 @@ def update_fallbacks(
     - Wenn OPENROUTER_API_KEY fehlt: 'openrouter-free' aus allen
       Fallback-Chains entfernen, damit LiteLLM nicht versucht einen
       OpenRouter-Aufruf ohne Key zu machen.
+    - Chain-ZIELE, die kein existierendes model_name (mehr) sind, werden
+      entfernt (in fallbacks UND context_window_fallbacks) – sonst wuerde
+      ein Fallback auf ein Modell mit null Deployments zeigen.
     """
     new_lines = list(lines)
 
@@ -256,7 +318,7 @@ def update_fallbacks(
             in_fallbacks = False
         if in_ctx and s and not line.startswith("  ") and not line.startswith("    "):
             in_ctx = False
-        if not in_fallbacks:
+        if not in_fallbacks and not in_ctx:
             continue
         m = re.match(r'\s*-\s*\{"([^"]+)":\s*\[(.*?)\]\}\s*$', line)
         if not m:
@@ -264,12 +326,18 @@ def update_fallbacks(
         chain_str = m.group(2)
         items = [x.strip().strip('"') for x in chain_str.split(",") if x.strip().strip('"')]
 
-        if openrouter_active:
-            if "openrouter-free" not in items:
-                items.append("openrouter-free")
-        else:
-            if "openrouter-free" in items:
-                items = [x for x in items if x != "openrouter-free"]
+        if valid_model_names is not None:
+            items = [x for x in items if x in valid_model_names]
+
+        if in_fallbacks:
+            if openrouter_active:
+                if "openrouter-free" not in items and (
+                    valid_model_names is None or "openrouter-free" in valid_model_names
+                ):
+                    items.append("openrouter-free")
+            else:
+                if "openrouter-free" in items:
+                    items = [x for x in items if x != "openrouter-free"]
 
         if not items:
             # Chain ist leer, Zeile loeschen
@@ -325,6 +393,7 @@ def render(
     env_path: Path,
     output_path: Path,
     dry_run: bool = False,
+    no_redis: bool = False,
 ) -> int:
     if not template_path.exists():
         print(f"FEHLER: Template nicht gefunden: {template_path}", file=sys.stderr)
@@ -343,6 +412,15 @@ def render(
         pass
 
     lines = text.splitlines(keepends=True)
+
+    # 1b) Redis-Bloecke (Cache + Router-Tracking) konditional entfernen
+    redis_active = bool(env.get("REDIS_HOST")) and not no_redis
+    lines = strip_redis_blocks(lines, redis_active)
+    if redis_active:
+        print("REDIS_HOST gesetzt -> Redis-Cache + Router-Tracking aktiv.")
+    else:
+        print("Kein REDIS_HOST (oder --no-redis) -> Redis-Bloecke entfernt "
+              "(Proxy laeuft ohne Cache/instanzuebergreifendes Tracking).")
 
     # 2) Bloecke parsen + filtern
     ml_start, ml_end, blocks = parse_blocks(lines)
@@ -394,13 +472,27 @@ def render(
             break
 
     # 5) Fallback-Chains bereinigen + OpenRouter-Free ergaenzen
+    #    (remove_orphaned_fallbacks: verwaiste KEYS; update_fallbacks:
+    #     verwaiste ZIELE + openrouter-free an/aus)
     new_lines = remove_orphaned_fallbacks(new_lines, valid_names)
     openrouter_active = bool(env.get("OPENROUTER_API_KEY"))
-    new_lines = update_fallbacks(new_lines, new_ml_end, openrouter_active)
+    new_lines = update_fallbacks(
+        new_lines, new_ml_end, openrouter_active, valid_model_names=valid_names
+    )
 
     # 6) Valid model_names-Liste ausgeben
     print(f"Behaltene Deployments: {len(kept)}")
     print(f"Verfuegbare model_names: {len(valid_names)}")
+
+    singles = single_deployment_warnings(kept)
+    if singles:
+        print(f"WARNUNG: {len(singles)} model_name(s) haben nach dem "
+              f"Provider-Filter nur noch 1 Deployment (keine "
+              f"Provider-Redundanz; bei Ausfall traegt nur die Fallback-Chain):")
+        for mn in singles:
+            print(f"  ! {mn}")
+        print("  -> Fehlende API-Keys in .env ergaenzen, um Redundanz "
+              "wiederherzustellen (siehe .env.example).")
     if openrouter_active:
         print("OPENROUTER_API_KEY gesetzt -> 'openrouter-free' wird an alle Fallback-Chains angehaengt.")
     else:
@@ -429,21 +521,37 @@ def render(
         flags=re.DOTALL | re.MULTILINE,
     )
 
-    # 7) Atomic write: erst tmp schreiben, dann os.replace() (atomar auf POSIX).
-    #    Backup wird NACH erfolgreichem Replace erstellt -- bei Crash bleibt
-    #    die alte Datei unberuehrt, kein Datenverlust-Fenster mehr.
-    tmp = output_path.with_suffix(output_path.suffix + ".tmp")
-    tmp.write_text(rendered, encoding="utf-8")
-    os.replace(tmp, output_path)
-
+    # 7) Backup der ALTEN Version (falls vorhanden), dann atomic write:
+    #    erst tmp schreiben, dann os.replace() (atomar auf POSIX).
     if output_path.exists():
         backup = output_path.with_suffix(output_path.suffix + f".bak.{int(time.time())}")
         import shutil
         shutil.copy2(output_path, backup)
         print(f"Backup: {backup}")
 
+    tmp = output_path.with_suffix(output_path.suffix + ".tmp")
+    tmp.write_text(rendered, encoding="utf-8")
+    os.replace(tmp, output_path)
+
+    prune_backups(output_path)
+
     print(f"config.yaml geschrieben: {output_path} ({rendered.count(chr(10))} Zeilen)")
     return 0
+
+
+def prune_backups(output_path: Path, keep: int = BACKUP_KEEP) -> None:
+    """Loescht alte <output>.bak.<timestamp>-Backups, behaelt die letzten `keep`."""
+    pattern = output_path.name + ".bak.*"
+    backups = sorted(
+        output_path.parent.glob(pattern),
+        key=lambda p: p.name,
+    )
+    for old in backups[:-keep] if keep else backups:
+        try:
+            old.unlink()
+            print(f"Altes Backup geloescht: {old.name}")
+        except OSError:
+            pass
 
 
 def main() -> int:
@@ -456,8 +564,13 @@ def main() -> int:
     ap.add_argument("--output", type=Path, default=DEFAULT_OUTPUT)
     ap.add_argument("--dry-run", action="store_true",
                     help="Nur Diff/Preview anzeigen, nicht schreiben")
+    ap.add_argument("--no-redis", action="store_true",
+                    help="Redis-Bloecke (Cache + Router-Tracking) entfernen, "
+                         "auch wenn REDIS_HOST gesetzt ist (fuer Standalone-"
+                         "Runs ohne Redis, z.B. make check-config)")
     args = ap.parse_args()
-    return render(args.template, args.env, args.output, dry_run=args.dry_run)
+    return render(args.template, args.env, args.output,
+                  dry_run=args.dry_run, no_redis=args.no_redis)
 
 
 if __name__ == "__main__":

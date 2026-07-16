@@ -17,13 +17,13 @@ spec:
         app: litellm-slave-1
         app.kubernetes.io/name: litellm-free-models
         app.kubernetes.io/component: slave
-      annotations:
-        prometheus.io/scrape: "true"
-        prometheus.io/port: "4000"
     spec:
+      securityContext:
+        seccompProfile:
+          type: RuntimeDefault
       containers:
         - name: litellm-slave
-          image: ghcr.io/berriai/litellm:main-latest
+          image: ghcr.io/berriai/litellm:main-v1.83.14-stable
           imagePullPolicy: IfNotPresent
           args:
             - "--config"
@@ -34,9 +34,25 @@ spec:
             - name: http
               containerPort: 4000
               protocol: TCP
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
           envFrom:
             - secretRef:
                 name: litellm-slave1-secrets
+          env:
+            # Redis cache (shared with master + slave2)
+            - name: REDIS_HOST
+              value: "litellm-redis"
+            - name: REDIS_PORT
+              value: "6379"
+            - name: REDIS_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: litellm-redis-secret
+                  key: redis-password
           volumeMounts:
             - name: config
               mountPath: /etc/litellm
@@ -96,13 +112,13 @@ spec:
         app: litellm-slave-2
         app.kubernetes.io/name: litellm-free-models
         app.kubernetes.io/component: slave
-      annotations:
-        prometheus.io/scrape: "true"
-        prometheus.io/port: "4000"
     spec:
+      securityContext:
+        seccompProfile:
+          type: RuntimeDefault
       containers:
         - name: litellm-slave
-          image: ghcr.io/berriai/litellm:main-latest
+          image: ghcr.io/berriai/litellm:main-v1.83.14-stable
           imagePullPolicy: IfNotPresent
           args:
             - "--config"
@@ -113,9 +129,25 @@ spec:
             - name: http
               containerPort: 4000
               protocol: TCP
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
           envFrom:
             - secretRef:
                 name: litellm-slave2-secrets
+          env:
+            # Redis cache (shared with master + slave1)
+            - name: REDIS_HOST
+              value: "litellm-redis"
+            - name: REDIS_PORT
+              value: "6379"
+            - name: REDIS_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: litellm-redis-secret
+                  key: redis-password
           volumeMounts:
             - name: config
               mountPath: /etc/litellm

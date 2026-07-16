@@ -38,9 +38,9 @@ import urllib.error
 import urllib.parse
 import urllib.request
 from collections import defaultdict
+from collections.abc import Callable
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Callable
 
 from providers_config import PROVIDERS as PROVIDER_CONFIGS
 
@@ -89,10 +89,30 @@ def load_env(path: Path) -> dict[str, str]:
     return env
 
 
+# Retry-Verhalten fuer Katalog-Abfragen: transiente Fehler (Netz, 429, 5xx)
+# sollen einen Provider nicht gleich fuer den ganzen Lauf disqualifizieren.
+HTTP_RETRIES = 3
+HTTP_BACKOFF_SECONDS = (1, 3)  # Wartezeit vor Retry 2 bzw. 3
+
+
 def http_get_json(url: str, headers: dict[str, str], timeout: int = 30) -> any:
-    req = urllib.request.Request(url, headers=headers, method="GET")
-    with urllib.request.urlopen(req, timeout=timeout) as resp:
-        return json.loads(resp.read().decode("utf-8", errors="replace"))
+    last_exc: Exception | None = None
+    for attempt in range(HTTP_RETRIES):
+        try:
+            req = urllib.request.Request(url, headers=headers, method="GET")
+            with urllib.request.urlopen(req, timeout=timeout) as resp:
+                return json.loads(resp.read().decode("utf-8", errors="replace"))
+        except urllib.error.HTTPError as exc:
+            # Nur transiente HTTP-Fehler wiederholen; 4xx (ausser 429) sind
+            # deterministisch (falscher Key, falsche URL) -> sofort raus.
+            if exc.code != 429 and exc.code < 500:
+                raise
+            last_exc = exc
+        except (urllib.error.URLError, TimeoutError, OSError) as exc:
+            last_exc = exc
+        if attempt < HTTP_RETRIES - 1:
+            time.sleep(HTTP_BACKOFF_SECONDS[min(attempt, len(HTTP_BACKOFF_SECONDS) - 1)])
+    raise last_exc
 
 
 def normalize(name: str) -> str:
@@ -116,12 +136,38 @@ def short_key(name: str) -> str:
 # Provider-Definitionen
 # ---------------------------------------------------------------------------
 
+def _filter_free_openrouter(data: dict) -> list[str]:
+    """
+    OpenRouter listet den GESAMTEN Katalog (400+ Modelle, ueberwiegend paid).
+    Fuer einen Free-Tier-Proxy sind nur Modelle relevant, die kostenlos sind:
+    `:free`-Varianten oder Eintraege mit Prompt- UND Completion-Preis 0.
+    Ohne diesen Filter koennte --apply ein PAID-Modell in die Config schreiben.
+    """
+    out: list[str] = []
+    for m in data.get("data", []):
+        mid = m.get("id") or ""
+        if not mid:
+            continue
+        if mid.endswith(":free"):
+            out.append(mid)
+            continue
+        pricing = m.get("pricing") or {}
+        try:
+            prompt = float(pricing.get("prompt") or 0)
+            completion = float(pricing.get("completion") or 0)
+        except (TypeError, ValueError):
+            continue
+        if prompt == 0 and completion == 0:
+            out.append(mid)
+    return out
+
+
 def fetch_openrouter(key: str) -> list[str]:
     data = http_get_json(
         "https://openrouter.ai/api/v1/models",
         {"Authorization": f"Bearer {key}"},
     )
-    return [m["id"] for m in data.get("data", [])]
+    return _filter_free_openrouter(data)
 
 
 def fetch_cerebras(key: str) -> list[str]:
@@ -141,29 +187,53 @@ def fetch_groq(key: str) -> list[str]:
 
 
 def fetch_cloudflare(api_key: str, api_base: str) -> list[str]:
-    url = api_base.rstrip("/") + "/models"
-    data = http_get_json(url, {"Authorization": f"Bearer {api_key}"})
-    if isinstance(data, dict) and "result" in data:
-        data = data["result"]
-    if isinstance(data, dict) and "models" in data:
-        data = data["models"]
+    """
+    Cloudflare Workers AI hat KEIN OpenAI-kompatibles GET /v1/models
+    (405 Method Not Allowed). Der Katalog liegt unter
+    /accounts/{id}/ai/models/search (paginiert). api_base ist
+    .../accounts/<id>/ai/v1 -> /v1 abschneiden, /models/search anhaengen.
+    """
+    account_base = re.sub(r"/v1/?$", "", api_base.rstrip("/"))
+    headers = {"Authorization": f"Bearer {api_key}"}
     names: list[str] = []
-    for m in data:
-        if isinstance(m, str):
-            names.append(m)
-        elif isinstance(m, dict):
-            names.append(m.get("name") or m.get("id") or m.get("model") or "")
-    return [n for n in names if n]
+    page = 1
+    while True:
+        url = f"{account_base}/models/search?per_page=100&page={page}"
+        data = http_get_json(url, headers)
+        result = data.get("result") or []
+        for m in result:
+            if isinstance(m, str):
+                names.append(m)
+            elif isinstance(m, dict):
+                name = m.get("name") or m.get("id") or m.get("model") or ""
+                if name:
+                    names.append(name)
+        if len(result) < 100 or page >= 10:
+            break
+        page += 1
+    return names
+
+
+def _parse_google_models(data: dict) -> list[str]:
+    """Nur Chat-faehige Modelle (generateContent); Embedding-/AQA-Modelle
+    wie `embedding-001` sind fuer den Proxy irrelevant und verschmutzen
+    sonst die Overlap-Gruppen."""
+    out: list[str] = []
+    for m in data.get("models", []):
+        name = m.get("name", "")
+        if not name:
+            continue
+        methods = m.get("supportedGenerationMethods") or []
+        if methods and "generateContent" not in methods:
+            continue
+        out.append(name.split("/")[-1])
+    return out
 
 
 def fetch_google_ai(key: str) -> list[str]:
     url = f"https://generativelanguage.googleapis.com/v1beta/models?key={urllib.parse.quote(key)}"
     data = http_get_json(url, {})
-    return [
-        m.get("name", "").split("/")[-1]
-        for m in data.get("models", [])
-        if m.get("name")
-    ]
+    return _parse_google_models(data)
 
 
 def fetch_nvidia(key: str) -> list[str]:
@@ -182,6 +252,26 @@ def fetch_mistral(key: str) -> list[str]:
     return [m["id"] for m in data.get("data", [])]
 
 
+def _parse_cohere_models(data: dict) -> list[str]:
+    """
+    Cohere liefert {"models": [{"name": "command-r-plus", "endpoints":
+    ["chat", ...]}, ...]}. Relevant sind die MODELL-Namen der chat-faehigen
+    Eintraege. (Eine fruehere Version sammelte faelschlich die
+    Endpoint-Namen "chat"/"generate"/"embed" ein — der Cohere-Katalog im
+    Report war dadurch unbrauchbar.)
+    """
+    names: list[str] = []
+    for m in data.get("models", []):
+        name = m.get("name", "")
+        if not name:
+            continue
+        endpoints = m.get("endpoints") or []
+        if endpoints and "chat" not in endpoints:
+            continue
+        names.append(name)
+    return names
+
+
 def fetch_cohere(key: str) -> list[str]:
     try:
         data = http_get_json(
@@ -189,19 +279,29 @@ def fetch_cohere(key: str) -> list[str]:
             {"Authorization": f"Bearer {key}"},
         )
     except urllib.error.HTTPError:
-        req = urllib.request.Request(
+        data = http_get_json(
             "https://api.cohere.com/v1/models",
-            headers={"Authorization": f"Bearer {key}"},
-            method="GET",
+            {"Authorization": f"Bearer {key}"},
         )
-        with urllib.request.urlopen(req, timeout=30) as resp:
-            data = json.loads(resp.read().decode("utf-8"))
-    names: list[str] = []
-    for m in data.get("models", []):
-        names.extend(m.get("endpoints") or [])
-    if not names:
-        names = [m.get("name", "") for m in data.get("models", [])]
-    return [n for n in names if n]
+    return _parse_cohere_models(data)
+
+
+def _parse_github_models(data) -> list[str]:
+    """GitHub Models liefert je nach Endpoint eine nackte LISTE von
+    Modell-Objekten oder ein Dict mit models/data-Key."""
+    if isinstance(data, dict):
+        items = data.get("models", data.get("data", []))
+    else:
+        items = data or []
+    out: list[str] = []
+    for m in items:
+        if isinstance(m, str):
+            out.append(m)
+        elif isinstance(m, dict):
+            name = m.get("name") or m.get("id") or ""
+            if name:
+                out.append(name)
+    return out
 
 
 def fetch_github_models(token: str) -> list[str]:
@@ -209,17 +309,16 @@ def fetch_github_models(token: str) -> list[str]:
         "https://models.inference.ai.azure.com/models",
         {"Authorization": f"Bearer {token}"},
     )
-    return [m.get("name") or m.get("id") for m in data.get("models", data.get("data", [])) if m.get("name") or m.get("id")]
+    return _parse_github_models(data)
 
 
 def fetch_opencode_zen(key: str) -> list[str]:
-    try:
-        data = http_get_json(
-            "https://opencode.ai/zen/v1/models",
-            {"Authorization": f"Bearer {key}"},
-        )
-    except urllib.error.HTTPError:
-        return []
+    # HTTP-Fehler bewusst NICHT schlucken: ein 401 (falscher Key) soll als
+    # [FAIL] auftauchen statt als "[OK] 0 Modelle" durchzurutschen.
+    data = http_get_json(
+        "https://opencode.ai/zen/v1/models",
+        {"Authorization": f"Bearer {key}"},
+    )
     return [m.get("id") or m.get("name") for m in data.get("data", []) if m.get("id") or m.get("name")]
 
 
@@ -248,43 +347,43 @@ def fetch_ovhcloud(*_args) -> list[str]:
     return [m["id"] for m in data.get("data", []) if m.get("id")]
 
 
+# Kuratierte Fallback-Liste, falls der Live-Katalog des HF-Routers nicht
+# erreichbar ist. Bewusst klein; der Live-Pfad ist der Normalfall.
+HF_FALLBACK_MODELS = [
+    "meta-llama/Llama-3.3-70B-Instruct",
+    "meta-llama/Meta-Llama-3.1-8B-Instruct",
+    "mistralai/Mistral-Small-3.2-24B-Instruct-2506",
+    "Qwen/Qwen2.5-Coder-32B-Instruct",
+    "deepseek-ai/DeepSeek-V3",
+    "deepseek-ai/DeepSeek-R1",
+    "openai/gpt-oss-120b",
+    "openai/gpt-oss-20b",
+]
+
+# Provider, deren Katalog im aktuellen Lauf NICHT vollstaendig ist (z.B.
+# HF-Fallback-Liste). Solche Kataloge duerfen nicht fuer die
+# Stale-Deployment-Erkennung benutzt werden (falsche Positive).
+PARTIAL_CATALOGS: set[str] = set()
+
+
 def fetch_huggingface(token: str) -> list[str]:
     """
-    Liefert nicht die 150k+ Modelle, sondern eine kuratierte Liste bekannter
-    Free-Inference-Modelle. Die komplette Liste ist nicht praktikabel filterbar.
+    Fragt den HF Inference Router live ab (OpenAI-kompatibles /v1/models,
+    listet die tatsaechlich per Inference-Providern servierbaren Modelle).
+    Faellt nur bei Fehlern auf die kuratierte Liste zurueck — die alte,
+    hartkodierte 2024er-Liste (gemma-2, Phi-3.5, ...) war dauerhaft stale.
     """
-    known = [
-        "meta-llama/Meta-Llama-3-8B-Instruct",
-        "meta-llama/Meta-Llama-3.1-8B-Instruct",
-        "meta-llama/Llama-3.2-3B-Instruct",
-        "meta-llama/Llama-3.2-11B-Vision-Instruct",
-        "mistralai/Mistral-7B-Instruct-v0.3",
-        "mistralai/Mistral-Nemo-Instruct-2407",
-        "google/gemma-2-9b-it",
-        "google/gemma-2-27b-it",
-        "Qwen/Qwen2.5-7B-Instruct",
-        "Qwen/Qwen2.5-Coder-32B-Instruct",
-        "deepseek-ai/DeepSeek-V3",
-        "deepseek-ai/DeepSeek-R1",
-        "microsoft/Phi-3.5-mini-instruct",
-        "microsoft/Phi-3-medium-128k-instruct",
-        "NousResearch/Hermes-3-Llama-3.1-8B",
-    ]
     headers = {"Authorization": f"Bearer {token}"} if token else {}
     try:
-        req = urllib.request.Request(
-            "https://huggingface.co/api/whoami-v2",
-            headers=headers,
-            method="GET",
-        )
-        with urllib.request.urlopen(req, timeout=15):
-            pass
-    except (urllib.error.URLError, urllib.error.HTTPError, OSError):
-        # Token ungueltig oder Netzwerkfehler -- das ist OK, da der Token
-        # nur fuer die whoami-Validierung gebraucht wird, nicht fuer die
-        # eigentliche Modellabfrage.
+        data = http_get_json("https://router.huggingface.co/v1/models", headers)
+        models = [m.get("id") for m in data.get("data", []) if m.get("id")]
+        if models:
+            PARTIAL_CATALOGS.discard("huggingface")
+            return models
+    except Exception:
         pass
-    return known
+    PARTIAL_CATALOGS.add("huggingface")
+    return list(HF_FALLBACK_MODELS)
 
 
 PROVIDERS: dict[str, Callable[..., list[str]]] = {
@@ -304,21 +403,26 @@ PROVIDERS: dict[str, Callable[..., list[str]]] = {
 }
 
 
+_REQUIRED_ENV = {
+    "openrouter": ["OPENROUTER_API_KEY"],
+    "cerebras": ["CEREBRAS_API_KEY"],
+    "groq": ["GROQ_API_KEY"],
+    "cloudflare": ["CLOUDFLARE_API_KEY", "CLOUDFLARE_API_BASE"],
+    "google-ai": ["GEMINI_API_KEY"],
+    "nvidia": ["NVIDIA_API_KEY"],
+    "mistral": ["MISTRAL_API_KEY"],
+    "cohere": ["COHERE_API_KEY"],
+    "github": ["GITHUB_TOKEN"],
+    "opencode-zen": ["OPENCODE_ZEN_API_KEY"],
+    # llm7io/huggingface/ovhcloud: Free-Tier ohne Pflicht-Key
+    "llm7io": [],
+    "huggingface": [],
+    "ovhcloud": [],
+}
+
+
 def required_env(name: str) -> list[str]:
-    if name in {"openrouter"}:        return ["OPENROUTER_API_KEY"]
-    if name in {"cerebras"}:          return ["CEREBRAS_API_KEY"]
-    if name in {"groq"}:              return ["GROQ_API_KEY"]
-    if name in {"cloudflare"}:        return ["CLOUDFLARE_API_KEY", "CLOUDFLARE_API_BASE"]
-    if name in {"google-ai"}:         return ["GEMINI_API_KEY"]
-    if name in {"nvidia"}:            return ["NVIDIA_API_KEY"]
-    if name in {"mistral"}:           return ["MISTRAL_API_KEY"]
-    if name in {"cohere"}:            return ["COHERE_API_KEY"]
-    if name in {"github"}:            return ["GITHUB_TOKEN"]
-    if name in {"opencode-zen"}:      return ["OPENCODE_ZEN_API_KEY"]
-    if name in {"llm7io"}:            return []
-    if name in {"huggingface"}:       return []
-    if name in {"ovhcloud"}:           return []  # Anonymer Free-Tier, kein Key noetig
-    return []
+    return _REQUIRED_ENV.get(name, [])
 
 
 # ---------------------------------------------------------------------------
@@ -508,12 +612,15 @@ def build_deployment(
         litellm_params:
           model: openrouter/openai/gpt-oss-120b
           api_key: os.environ/OPENROUTER_API_KEY
+          tpm: 200000
+          rpm: 1
         model_info:
           input_cost_per_token: 0
           output_cost_per_token: 0
           mode: chat
-        tpm: 200000
-        rpm: 1
+
+    tpm/rpm liegen in litellm_params (nicht auf Deployment-Top-Level),
+    damit usage-based-routing-v2 sie fuer Budget-Routing auswertet.
     """
     prov = PROVIDER_CONFIGS[provider]
 
@@ -526,23 +633,23 @@ def build_deployment(
 
     lines: list[str] = []
     lines.append(f"  - model_name: {model_name}\n")
-    lines.append(f"    litellm_params:\n")
+    lines.append("    litellm_params:\n")
     lines.append(f"      model: {model_str}\n")
     if prov.env_var:
         lines.append(f"      api_key: os.environ/{prov.env_var}\n")
     else:
-        lines.append(f"      api_key: \"\"\n")
+        lines.append("      api_key: \"\"\n")
     if prov.needs_api_base:
         if prov.api_base_env:
             lines.append(f"      api_base: os.environ/{prov.api_base_env}\n")
         elif prov.api_base_static:
             lines.append(f"      api_base: {prov.api_base_static}\n")
-    lines.append(f"    model_info:\n")
+    lines.append(f"      tpm: {prov.tpm}\n")
+    lines.append(f"      rpm: {prov.rpm}\n")
+    lines.append("    model_info:\n")
     lines.append(f"      input_cost_per_token: {_fmt_cost_yaml(ic)}\n")
     lines.append(f"      output_cost_per_token: {_fmt_cost_yaml(oc)}\n")
-    lines.append(f"      mode: chat\n")
-    lines.append(f"    tpm: {prov.tpm}\n")
-    lines.append(f"    rpm: {prov.rpm}\n")
+    lines.append("      mode: chat\n")
     lines.append("\n")  # Leerzeile nach Block
     return lines
 
@@ -589,14 +696,17 @@ def parse_config(path: Path) -> tuple[list[str], int, int, dict[str, list[dict]]
         nonlocal current_mn, current_block_start, current_block_lines
         if current_mn is None:
             return
-        # Parse model_id, ic, oc aus dem Block
+        # Parse model_id, api_base, ic, oc aus dem Block
         model_id = ""
+        api_base = ""
         ic = 0.0
         oc = 0.0
         for ln in current_block_lines:
             s = ln.strip()
             if s.startswith("model:") and "model_id" not in s:
                 model_id = s.split("model:", 1)[1].strip()
+            elif s.startswith("api_base:"):
+                api_base = s.split("api_base:", 1)[1].strip()
             elif s.startswith("input_cost_per_token:"):
                 try:
                     ic = float(s.split(":", 1)[1].strip())
@@ -607,16 +717,17 @@ def parse_config(path: Path) -> tuple[list[str], int, int, dict[str, list[dict]]
                     oc = float(s.split(":", 1)[1].strip())
                 except ValueError:
                     oc = 0.0
-        # Provider ableiten aus 'model:' String (z.B. 'openrouter/...')
+        # Provider ableiten: render-config._provider_from_block nutzt neben
+        # dem Praefix auch die api_base — noetig, weil NVIDIA, GitHub Models,
+        # OpenCode Zen, LLM7.io und OVHcloud ALLE das 'openai/'-Praefix
+        # teilen. Ein reiner Praefix-Match ordnete frueher alle diese
+        # Deployments 'nvidia' zu, wodurch der Apply-Plan bestehende
+        # OVH-/GitHub-/LLM7-Deployments nicht erkannte und Duplikate plante.
         provider = ""
         if "/" in model_id:
-            prefix = model_id.split("/", 1)[0]
-            for name, p in PROVIDER_CONFIGS.items():
-                if p.prefix == prefix:
-                    provider = name
-                    break
+            provider = _load_render_config_cached()._provider_from_block(model_id, api_base)
             if not provider:
-                provider = prefix
+                provider = model_id.split("/", 1)[0]
         existing.setdefault(current_mn, []).append({
             "provider": provider,
             "model_id": model_id,
@@ -675,8 +786,24 @@ def generate_apply_plan(
     for n, p in zen_groups.items():
         all_groups.setdefault(n, {}).update(p)
 
-    for model_name, providers in all_groups.items():
-        # Bestehende Eintraege als Set
+    # Gruppen sind NORMALISIERT benannt (z.B. "3-3-70b"), das Template nutzt
+    # sprechende model_names ("llama-3.3-70b-instruct"). Ohne dieses Mapping
+    # wuerde fast jedes bestehende Deployment als "neu" geplant und --apply
+    # legte Duplikat-Bloecke unter den normalisierten Namen an.
+    norm_to_existing: dict[str, str] = {}
+    for mn in existing:
+        norm_to_existing.setdefault(normalize(mn), mn)
+
+    # Globales Dedupe-Set: ein Deployment, das bereits unter IRGENDEINEM
+    # model_name existiert, wird nie erneut vorgeschlagen.
+    global_keys = {
+        model_id_key(e["provider"], e["model_id"])
+        for entries in existing.values()
+        for e in entries
+    }
+
+    for group_norm, providers in all_groups.items():
+        model_name = norm_to_existing.get(group_norm, group_norm)
         existing_keys = set()
         if model_name in existing:
             for e in existing[model_name]:
@@ -685,7 +812,7 @@ def generate_apply_plan(
         for provider, originals in providers.items():
             for orig in sorted(set(originals)):
                 key = model_id_key(provider, orig)
-                if key in existing_keys:
+                if key in existing_keys or key in global_keys:
                     plan.append({
                         "model_name": model_name,
                         "provider": provider,
@@ -957,12 +1084,14 @@ def _update_fallbacks(
         chain = [c for c in fallback_pool if c != mn][:4]
         chain_str = ", ".join(f'"{c}"' for c in chain)
         insertions.append(f'    - {{"{mn}": [{chain_str}]}}\n')
-        # Catch-All '*' nur bei >= 4 Providern
+        # Catch-All '*' nur bei >= 4 Providern. Chain-Ziele muessen aktuelle
+        # model_names sein; render-config.py filtert beim Rendern zusaetzlich
+        # alle Ziele raus, die nicht (mehr) in der model_list existieren.
         if n_prov >= 4 and "*" not in existing_keys:
             existing_keys.add("*")
             insertions.append(
                 '    - {"*": ["llama-3.1-8b", "gpt-oss-20b", '
-                '"gemma-3-12b-it", "deepseek-v4-flash", "openrouter-free"]}\n'
+                '"gemma-4-26b-a4b-it", "deepseek-v4-flash", "openrouter-free"]}\n'
             )
         added += 1
 
@@ -1005,21 +1134,38 @@ def regenerate_multi_instance() -> bool:
 # ---------------------------------------------------------------------------
 
 def collect_models(env: dict[str, str]) -> tuple[dict[str, list[str]], list[tuple[str, str]]]:
+    """
+    Fragt alle Provider-Kataloge PARALLEL ab (frueher sequenziell mit
+    sleep dazwischen — bei 13 Providern unnoetig langsam). Ergebnisse werden
+    dedupliziert und sortiert; die Ausgabe erfolgt deterministisch in
+    PROVIDERS-Reihenfolge.
+    """
+    from concurrent.futures import ThreadPoolExecutor
+
     raw: dict[str, list[str]] = {}
     errors: list[tuple[str, str]] = []
-    for name, fn in PROVIDERS.items():
-        needed = required_env(name)
-        if any(not env.get(v) for v in needed):
-            errors.append((name, "Key fehlt: " + ", ".join(needed) or "(keiner)"))
-            continue
-        try:
-            models = fn(env)
-            raw[name] = models
-            print(f"  [OK]   {name:14s} {len(models):4d} Modelle")
-        except Exception as exc:
-            errors.append((name, f"{type(exc).__name__}: {exc}"))
-            print(f"  [FAIL] {name:14s} {type(exc).__name__}: {exc}")
-        time.sleep(0.2)
+    futures = {}
+
+    with ThreadPoolExecutor(max_workers=8) as pool:
+        for name, fn in PROVIDERS.items():
+            needed = required_env(name)
+            if any(not env.get(v) for v in needed):
+                errors.append((name, "Key fehlt: " + ", ".join(needed)))
+                continue
+            futures[name] = pool.submit(fn, env)
+
+        for name in PROVIDERS:
+            fut = futures.get(name)
+            if fut is None:
+                continue
+            try:
+                models = sorted({m for m in fut.result() if m})
+                raw[name] = models
+                partial = "  (unvollstaendiger Fallback-Katalog)" if name in PARTIAL_CATALOGS else ""
+                print(f"  [OK]   {name:14s} {len(models):4d} Modelle{partial}")
+            except Exception as exc:
+                errors.append((name, f"{type(exc).__name__}: {exc}"))
+                print(f"  [FAIL] {name:14s} {type(exc).__name__}: {exc}")
     return raw, errors
 
 
@@ -1066,6 +1212,67 @@ def find_zen_groups(raw: dict[str, list[str]]) -> dict[str, dict[str, list[str]]
     return out
 
 
+# model_names, die bewusst NICHT gegen Live-Kataloge geprueft werden
+# (Pseudo-/Router-Modelle, die in /models-Listings nicht auftauchen).
+STALE_CHECK_EXEMPT = {"openrouter-free"}
+
+
+def _native_model_id(model_id: str) -> str:
+    """
+    Entfernt das LiteLLM-Routing-Praefix (erstes Pfadsegment) und liefert
+    die Provider-native Modell-ID:
+      openrouter/openai/gpt-oss-120b:free -> openai/gpt-oss-120b:free
+      cerebras/gpt-oss-120b               -> gpt-oss-120b
+      openai/openai/gpt-oss-120b (NVIDIA) -> openai/gpt-oss-120b
+      huggingface/meta-llama/Llama-3.3    -> meta-llama/Llama-3.3
+    """
+    if "/" not in model_id:
+        return model_id
+    return model_id.split("/", 1)[1]
+
+
+def find_stale_deployments(
+    template_path: Path,
+    raw: dict[str, list[str]],
+    partial: set[str] | None = None,
+) -> list[dict]:
+    """
+    Findet Template-Deployments, deren Modell im LIVE-Katalog des Providers
+    nicht (mehr) vorkommt — die Gegenrichtung zum Apply-Plan, der nur
+    Neuzugaenge kennt. Report-only: Entfernungen bleiben bewusst manuell
+    (Kataloge flappen; vgl. gemma-3-12b-it-Historie).
+
+    Geprueft wird nur gegen Provider, deren Abfrage erfolgreich UND
+    vollstaendig war (keine leeren Kataloge, keine PARTIAL_CATALOGS).
+    """
+    partial = PARTIAL_CATALOGS if partial is None else partial
+    rc = _load_render_config_module()
+    lines = template_path.read_text(encoding="utf-8").splitlines(keepends=True)
+    _, _, blocks = rc.parse_blocks(lines)
+
+    catalogs = {
+        p: {m.lower() for m in models}
+        for p, models in raw.items()
+        if models and p not in partial
+    }
+
+    stale: list[dict] = []
+    for b in blocks:
+        provider = b["provider"]
+        if provider not in catalogs:
+            continue
+        if b["model_name"] in STALE_CHECK_EXEMPT:
+            continue
+        native = _native_model_id(b["model_id"])
+        if native.lower() not in catalogs[provider]:
+            stale.append({
+                "model_name": b["model_name"],
+                "provider": provider,
+                "native_id": native,
+            })
+    return stale
+
+
 def write_report(
     path: Path,
     raw: dict[str, list[str]],
@@ -1075,6 +1282,7 @@ def write_report(
     pricing: dict[str, dict] | None = None,
     pricing_status: str = "deaktiviert",
     plan: list[dict] | None = None,
+    stale: list[dict] | None = None,
 ) -> None:
     lines: list[str] = []
     lines.append("=" * 78)
@@ -1147,6 +1355,23 @@ def write_report(
         for m in sorted(models):
             tag = " [ZEN]" if m in {normalize(z) for z in ZEN_MODEL_NAMES} else ""
             lines.append(f"      - {m}{tag}")
+    lines.append("")
+
+    # ------------------------------------------------------------------
+    # Verwaiste Template-Deployments (Modell nicht mehr im Provider-Katalog)
+    # ------------------------------------------------------------------
+    lines.append("─" * 78)
+    lines.append("Verwaiste Template-Deployments (Modell fehlt im Live-Katalog)")
+    lines.append("─" * 78)
+    lines.append("  Report-only: Entfernungen bleiben manuell (Kataloge flappen).")
+    lines.append("  Geprueft nur gegen erfolgreich + vollstaendig abgefragte Provider.")
+    if stale is None:
+        lines.append("  (Pruefung uebersprungen: kein Template gefunden)")
+    elif not stale:
+        lines.append("  (keine — alle Template-Deployments sind in den Katalogen vorhanden)")
+    else:
+        for s in sorted(stale, key=lambda x: (x["provider"], x["model_name"])):
+            lines.append(f"  [!] {s['provider']:14s} {s['model_name']:26s} -> {s['native_id']}")
     lines.append("")
 
     # ------------------------------------------------------------------
@@ -1299,6 +1524,115 @@ def write_report(
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
+# ---------------------------------------------------------------------------
+# Deployment-Matrix-Generator (--emit-matrix / --write-docs)
+# ---------------------------------------------------------------------------
+
+PROVIDER_DISPLAY = {
+    "openrouter": "OpenRouter",
+    "cerebras": "Cerebras",
+    "groq": "Groq",
+    "cloudflare": "Cloudflare",
+    "google-ai": "Google AI Studio",
+    "nvidia": "NVIDIA",
+    "mistral": "Mistral",
+    "cohere": "Cohere",
+    "github": "GitHub Models",
+    "opencode-zen": "OpenCode Zen",
+    "llm7io": "LLM7.io",
+    "huggingface": "HuggingFace",
+    "ovhcloud": "OVHcloud",
+}
+
+MATRIX_BEGIN = "<!-- BEGIN GENERATED MODEL MATRIX (python3 find-shared-models.py --write-docs) -->"
+MATRIX_END = "<!-- END GENERATED MODEL MATRIX -->"
+
+
+def _load_render_config_module():
+    """Laedt render-config.py (Bindestrich im Namen) als Modul, um dessen
+    Block-Parser inkl. Provider-Diskrimination wiederzuverwenden."""
+    import importlib.util
+    path = REPO_ROOT / "render-config.py"
+    spec = importlib.util.spec_from_file_location("render_config", path)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+_RC_MODULE = None
+
+
+def _load_render_config_cached():
+    """Gecachte Variante fuer heisse Pfade (parse_config ruft die
+    Provider-Diskrimination pro Deployment-Block auf)."""
+    global _RC_MODULE
+    if _RC_MODULE is None:
+        _RC_MODULE = _load_render_config_module()
+    return _RC_MODULE
+
+
+def build_matrix(template_path: Path) -> str:
+    """
+    Erzeugt die Deployment-Matrix (Markdown-Tabelle) aus dem Template:
+    model_name -> Anzahl Deployments + Provider-Liste. Damit muss die
+    Tabelle in AGENTS.md/README.md nicht mehr von Hand gepflegt werden.
+    """
+    rc = _load_render_config_module()
+    lines = template_path.read_text(encoding="utf-8").splitlines(keepends=True)
+    _, _, blocks = rc.parse_blocks(lines)
+
+    order: list[str] = []
+    providers_by_model: dict[str, list[str]] = {}
+    for b in blocks:
+        mn = b["model_name"]
+        if mn not in providers_by_model:
+            providers_by_model[mn] = []
+            order.append(mn)
+        disp = PROVIDER_DISPLAY.get(b["provider"], b["provider"] or "?")
+        if disp not in providers_by_model[mn]:
+            providers_by_model[mn].append(disp)
+
+    counts = {mn: sum(1 for b in blocks if b["model_name"] == mn) for mn in order}
+
+    md: list[str] = []
+    md.append(
+        f"Stand (aus `{template_path.name}` generiert): "
+        f"**{len(order)} model_names, {len(blocks)} base-Deployments**. "
+        f"`render-config.py` entfernt Deployments von Providern ohne "
+        f"API-Key in `.env` – die effektive Anzahl kann daher kleiner sein."
+    )
+    md.append("")
+    md.append("| model_name | Deployments | Provider |")
+    md.append("|---|---|---|")
+    for mn in sorted(order, key=lambda m: (-counts[m], m)):
+        md.append(f"| `{mn}` | {counts[mn]} | {', '.join(providers_by_model[mn])} |")
+    return "\n".join(md)
+
+
+def write_matrix_into_docs(matrix_md: str, doc_paths: list[Path]) -> int:
+    """Ersetzt den Inhalt zwischen den MATRIX-Markern in den Doku-Dateien."""
+    updated = 0
+    replacement = f"{MATRIX_BEGIN}\n{matrix_md}\n{MATRIX_END}"
+    for p in doc_paths:
+        if not p.exists():
+            print(f"  [WARN] {p} nicht gefunden, uebersprungen")
+            continue
+        text = p.read_text(encoding="utf-8")
+        if MATRIX_BEGIN not in text or MATRIX_END not in text:
+            print(f"  [WARN] Marker fehlen in {p.name}, uebersprungen "
+                  f"(erwartet: {MATRIX_BEGIN})")
+            continue
+        pattern = re.escape(MATRIX_BEGIN) + r".*?" + re.escape(MATRIX_END)
+        new_text = re.sub(pattern, replacement.replace("\\", r"\\"), text, count=1, flags=re.DOTALL)
+        if new_text != text:
+            p.write_text(new_text, encoding="utf-8")
+            print(f"  Matrix aktualisiert in {p.name}")
+            updated += 1
+        else:
+            print(f"  {p.name} bereits aktuell")
+    return updated
+
+
 def main() -> int:
     global PRICING_CACHE, PRICING_URL
     ap = argparse.ArgumentParser(
@@ -1312,8 +1646,8 @@ def main() -> int:
     ap.add_argument("--refresh-pricing", action="store_true",
                     help="Preis-Cache ignorieren und neu von GitHub laden")
     ap.add_argument("--pricing-url", default=PRICING_URL,
-                    help=f"Alternative URL fuer model_prices_and_context_window.json "
-                         f"(default: GitHub raw)")
+                    help="Alternative URL fuer model_prices_and_context_window.json "
+                         "(default: GitHub raw)")
     ap.add_argument("--pricing-cache", type=Path, default=PRICING_CACHE,
                     help="Lokaler Cache-Pfad fuer die Preis-DB")
     ap.add_argument("--config", type=Path,
@@ -1332,7 +1666,28 @@ def main() -> int:
                          "config.yaml rendern (default: nur Diff im Report)")
     ap.add_argument("--regen-multi-instance", action="store_true",
                     help="Nach --apply multi-instance/generate-config.py ausfuehren")
+    ap.add_argument("--emit-matrix", action="store_true",
+                    help="Deployment-Matrix (Markdown) aus dem Template nach "
+                         "stdout schreiben und beenden (keine API-Abfragen)")
+    ap.add_argument("--write-docs", action="store_true",
+                    help="Deployment-Matrix zwischen die Marker-Kommentare in "
+                         "AGENTS.md und README.md schreiben und beenden")
     args = ap.parse_args()
+
+    # Matrix-Modi brauchen weder .env noch Provider-Abfragen
+    if args.emit_matrix or args.write_docs:
+        src = args.template if args.template.exists() else args.config
+        if not src.exists():
+            print(f"FEHLER: {src} nicht gefunden.", file=sys.stderr)
+            return 2
+        matrix = build_matrix(src)
+        if args.write_docs:
+            write_matrix_into_docs(
+                matrix, [REPO_ROOT / "AGENTS.md", REPO_ROOT / "README.md"]
+            )
+        else:
+            print(matrix)
+        return 0
 
     env = load_env(args.env)
     if not env:
@@ -1340,7 +1695,7 @@ def main() -> int:
         return 2
 
     print(f"Lade .env aus {args.env}")
-    print(f"Abfrage laeuft...\n")
+    print("Abfrage laeuft...\n")
     raw, errors = collect_models(env)
     print()
 
@@ -1401,7 +1756,18 @@ def main() -> int:
         print(f"\n  [WARN] weder {args.template} noch {args.config} gefunden, "
               "Apply-Plan uebersprungen.", file=sys.stderr)
 
-    write_report(args.output, raw, errors, groups, zen_groups, pricing, pricing_status, plan)
+    # Gegenrichtung zum Apply-Plan: Template-Deployments, deren Modell im
+    # Live-Katalog fehlt (report-only, keine automatische Entfernung).
+    stale: list[dict] | None = None
+    if args.template.exists() and raw:
+        stale = find_stale_deployments(args.template, raw)
+        if stale:
+            print(f"\n[WARN] {len(stale)} Template-Deployment(s) nicht mehr im "
+                  f"Provider-Katalog gefunden — Details im Report (Abschnitt "
+                  f"'Verwaiste Template-Deployments').")
+
+    write_report(args.output, raw, errors, groups, zen_groups, pricing,
+                 pricing_status, plan, stale)
     print(f"\nReport geschrieben nach: {args.output}")
 
     if args.apply and plan and target_for_apply is not None:
