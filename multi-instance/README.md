@@ -29,15 +29,15 @@ Erweitert das [Haupt-Setup](../README.md) auf **3 eigenständige LiteLLM-Instanz
 ```
 
 **Master** (multi-instance/master/config.yaml):
-- **69 direkte Deployments** mit den API-Keys des Masters
-- **44 Slave-Deployments** (22 Modelle × 2 Slaves), die HTTP‑Requests an `slave1:4000` / `slave2:4000` senden
-- → **113 Deployments** insgesamt
+- **99 direkte Deployments** mit den API-Keys des Masters
+- **72 Slave-Deployments** (36 Modelle × 2 Slaves), die HTTP‑Requests an `slave1:4000` / `slave2:4000` senden
+- → **171 Deployments** insgesamt
 
 **Jeder Slave** (nutzt die base `config.yaml`):
 - Läuft mit **eigenen API-Keys** (andere Accounts als Master und andere Slaves)
 - Proxied die Anfrage an die echten Provider (OpenRouter, Groq, etc.)
 
-**Routing**: Der Master routet per `usage-based-routing-v2` über ALLE 113 Deployments – Deployments mit verbleibendem `tpm`/`rpm`-Budget werden bevorzugt; über das gemeinsame Redis wird der Verbrauch instanzübergreifend getrackt (inkl. geteilter Cooldowns). Sind die direkten Deployments ausgeschöpft, routet der Master zu einem Slave – der hat eigene Keys und eigene Rate-Limits.
+**Routing**: Der Master routet per `usage-based-routing-v2` über ALLE 171 Deployments – Deployments mit verbleibendem `tpm`/`rpm`-Budget werden bevorzugt; über das gemeinsame Redis wird der Verbrauch instanzübergreifend getrackt (inkl. geteilter Cooldowns). Sind die direkten Deployments ausgeschöpft, routet der Master zu einem Slave – der hat eigene Keys und eigene Rate-Limits.
 
 ## Effekt
 
@@ -146,11 +146,11 @@ multi-instance/k8s/
 ├── namespace.yaml              # Namespace: litellm-free-models
 ├── kustomization.yaml          # Kustomize – alle Resourcen auf einmal
 ├── master/
-│   ├── configmap.yaml          # Generiert (113 Deployments)
+│   ├── configmap.yaml          # Generiert (171 Deployments)
 │   ├── deployment.yaml         # Master-Pod
 │   └── service.yaml            # ClusterIP: litellm-master
 ├── slave/
-│   ├── configmap.yaml          # Generiert (base config, 69 Deployments)
+│   ├── configmap.yaml          # Generiert (base config, 99 Deployments)
 │   ├── deployment.yaml         # Slave-1 + Slave-2 Pods
 │   └── service.yaml            # ClusterIP: litellm-slave-1, litellm-slave-2
 └── secret.yaml.template        # Template für 3 Secrets
@@ -237,7 +237,7 @@ Slaves müssen nicht neugestartet werden – sie verwenden die base `config.yaml
 multi-instance/
 ├── .env.example              # Projekt-.env: Redis-/Postgres-Passwörter (Compose-Interpolation)
 ├── master/
-│   ├── config.yaml           # Docker-Config (69 base + 44 slave = 113)
+│   ├── config.yaml           # Docker-Config (99 base + 72 slave = 171)
 │   └── .env.example          # Master-Keys + SLAVE1/2_API_KEY
 ├── slave1/
 │   └── .env.example          # Slave-1-Keys (andere Accounts)
@@ -247,7 +247,7 @@ multi-instance/
 │   ├── namespace.yaml
 │   ├── kustomization.yaml    # referenziert ../../k8s/redis/ als gemeinsame Base
 │   ├── master/
-│   │   ├── configmap.yaml    # K8s-ConfigMap (K8s-DNS-URLs, 113 dep.)
+│   │   ├── configmap.yaml    # K8s-ConfigMap (K8s-DNS-URLs, 171 dep.)
 │   │   ├── deployment.yaml
 │   │   └── service.yaml
 │   ├── slave/

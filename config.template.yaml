@@ -257,6 +257,18 @@ model_list:
       input_cost_per_token: 2.9e-08
       output_cost_per_token: 1.4e-07
       mode: chat
+  - model_name: gpt-oss-20b
+    litellm_params:
+      model: openai/gpt-oss:20b
+      api_key: os.environ/LLM7IO_API_KEY
+      api_base: https://api.llm7.io/v1
+      tpm: 200000
+      rpm: 40
+    model_info:
+      input_cost_per_token: 0
+      output_cost_per_token: 0
+      mode: chat
+
 
   # ===========================================================================
   # llama-3.1-8b  –  5 FREE PROVIDERS
@@ -410,6 +422,17 @@ model_list:
       input_cost_per_token: 6e-08
       output_cost_per_token: 3.3e-07
       mode: chat
+  - model_name: gemma-4-26b-a4b-it
+    litellm_params:
+      model: gemini/gemma-4-26b-a4b-it
+      api_key: os.environ/GEMINI_API_KEY
+      tpm: 200000
+      rpm: 2
+    model_info:
+      input_cost_per_token: 0
+      output_cost_per_token: 0
+      mode: chat
+
 
   # ===========================================================================
   # kimi-k2.6  –  3 FREE PROVIDERS
@@ -448,6 +471,41 @@ model_list:
       input_cost_per_token: 6.7e-07
       output_cost_per_token: 3.39e-06
       mode: chat
+  - model_name: kimi-k2.6
+    litellm_params:
+      model: openai/kimi-k2.6
+      api_key: os.environ/OPENCODE_ZEN_API_KEY
+      api_base: https://opencode.ai/zen/v1
+      tpm: 200000
+      rpm: 10
+    model_info:
+      input_cost_per_token: 0
+      output_cost_per_token: 0
+      mode: chat
+
+  - model_name: kimi-k2.6
+    litellm_params:
+      model: openai/kimi-k2.6
+      api_key: os.environ/LLM7IO_API_KEY
+      api_base: https://api.llm7.io/v1
+      tpm: 200000
+      rpm: 40
+    model_info:
+      input_cost_per_token: 0
+      output_cost_per_token: 0
+      mode: chat
+
+  - model_name: kimi-k2.6
+    litellm_params:
+      model: huggingface/moonshotai/Kimi-K2.6
+      api_key: os.environ/HF_TOKEN
+      tpm: 200000
+      rpm: 30
+    model_info:
+      input_cost_per_token: 0
+      output_cost_per_token: 0
+      mode: chat
+
 
   # ===========================================================================
   # nemotron-3-120b  –  3 FREE PROVIDERS
@@ -539,6 +597,30 @@ model_list:
       input_cost_per_token: 9.8e-08
       output_cost_per_token: 1.96e-07
       mode: chat
+  - model_name: deepseek-v4-flash
+    litellm_params:
+      model: openai/deepseek-v4-flash
+      api_key: os.environ/OPENCODE_ZEN_API_KEY
+      api_base: https://opencode.ai/zen/v1
+      tpm: 200000
+      rpm: 10
+    model_info:
+      input_cost_per_token: 0
+      output_cost_per_token: 0
+      mode: chat
+
+  - model_name: deepseek-v4-flash
+    litellm_params:
+      model: openai/deepseek-v4-flash
+      api_key: os.environ/LLM7IO_API_KEY
+      api_base: https://api.llm7.io/v1
+      tpm: 200000
+      rpm: 40
+    model_info:
+      input_cost_per_token: 0
+      output_cost_per_token: 0
+      mode: chat
+
 
   # ===========================================================================
   # nemotron-3-nano-30b-a3b  –  3 FREE PROVIDERS
@@ -692,6 +774,17 @@ model_list:
       rpm: 10
     model_info:
       mode: chat
+  - model_name: north-mini-code
+    litellm_params:
+      model: openrouter/cohere/north-mini-code:free
+      api_key: os.environ/OPENROUTER_API_KEY
+      tpm: 200000
+      rpm: 1
+    model_info:
+      input_cost_per_token: 0
+      output_cost_per_token: 0
+      mode: chat
+
 
   # ===========================================================================
   # llama-4-maverick-17b  –  3 FREE PROVIDERS
@@ -777,6 +870,28 @@ model_list:
       input_cost_per_token: 1.2e-07
       output_cost_per_token: 3.7e-07
       mode: chat
+  - model_name: gemma-4-31b-it
+    litellm_params:
+      model: cerebras/gemma-4-31b
+      api_key: os.environ/CEREBRAS_API_KEY
+      tpm: 1000000
+      rpm: 30
+    model_info:
+      input_cost_per_token: 0
+      output_cost_per_token: 0
+      mode: chat
+
+  - model_name: gemma-4-31b-it
+    litellm_params:
+      model: gemini/gemma-4-31b-it
+      api_key: os.environ/GEMINI_API_KEY
+      tpm: 200000
+      rpm: 2
+    model_info:
+      input_cost_per_token: 0
+      output_cost_per_token: 0
+      mode: chat
+
 
   # ===========================================================================
   # LLM7.io  –  FREE OPENAI-COMPATIBLE API (12. Provider)
@@ -906,6 +1021,402 @@ model_list:
     model_info:
       mode: chat
 
+
+  # ===========================================================================
+  # gpt-oss-safeguard-20b  –  2 FREE PROVIDERS
+  # ===========================================================================
+  - model_name: gpt-oss-safeguard-20b
+    litellm_params:
+      model: groq/openai/gpt-oss-safeguard-20b
+      api_key: os.environ/GROQ_API_KEY
+      tpm: 8000
+      rpm: 2
+    model_info:
+      input_cost_per_token: 0
+      output_cost_per_token: 0
+      mode: chat
+
+  - model_name: gpt-oss-safeguard-20b
+    litellm_params:
+      model: huggingface/openai/gpt-oss-safeguard-20b
+      api_key: os.environ/HF_TOKEN
+      tpm: 200000
+      rpm: 30
+    model_info:
+      input_cost_per_token: 0
+      output_cost_per_token: 0
+      mode: chat
+
+
+  # ===========================================================================
+  # k2-5  –  2 FREE PROVIDERS
+  # ===========================================================================
+  - model_name: k2-5
+    litellm_params:
+      model: openai/kimi-k2.5
+      api_key: os.environ/OPENCODE_ZEN_API_KEY
+      api_base: https://opencode.ai/zen/v1
+      tpm: 200000
+      rpm: 10
+    model_info:
+      input_cost_per_token: 0
+      output_cost_per_token: 0
+      mode: chat
+
+  - model_name: k2-5
+    litellm_params:
+      model: huggingface/moonshotai/Kimi-K2.5
+      api_key: os.environ/HF_TOKEN
+      tpm: 200000
+      rpm: 30
+    model_info:
+      input_cost_per_token: 0
+      output_cost_per_token: 0
+      mode: chat
+
+
+  # ===========================================================================
+  # k2-7-code  –  2 FREE PROVIDERS
+  # ===========================================================================
+  - model_name: k2-7-code
+    litellm_params:
+      model: openai/kimi-k2.7-code
+      api_key: os.environ/OPENCODE_ZEN_API_KEY
+      api_base: https://opencode.ai/zen/v1
+      tpm: 200000
+      rpm: 10
+    model_info:
+      input_cost_per_token: 0
+      output_cost_per_token: 0
+      mode: chat
+
+  - model_name: k2-7-code
+    litellm_params:
+      model: huggingface/moonshotai/Kimi-K2.7-Code
+      api_key: os.environ/HF_TOKEN
+      tpm: 200000
+      rpm: 30
+    model_info:
+      input_cost_per_token: 0
+      output_cost_per_token: 0
+      mode: chat
+
+
+  # ===========================================================================
+  # lyria-3-clip  –  2 FREE PROVIDERS
+  # ===========================================================================
+  - model_name: lyria-3-clip
+    litellm_params:
+      model: openrouter/google/lyria-3-clip-preview
+      api_key: os.environ/OPENROUTER_API_KEY
+      tpm: 200000
+      rpm: 1
+    model_info:
+      input_cost_per_token: 0
+      output_cost_per_token: 0
+      mode: chat
+
+  - model_name: lyria-3-clip
+    litellm_params:
+      model: gemini/lyria-3-clip-preview
+      api_key: os.environ/GEMINI_API_KEY
+      tpm: 200000
+      rpm: 2
+    model_info:
+      input_cost_per_token: 0
+      output_cost_per_token: 0
+      mode: chat
+
+
+  # ===========================================================================
+  # lyria-3-pro  –  2 FREE PROVIDERS
+  # ===========================================================================
+  - model_name: lyria-3-pro
+    litellm_params:
+      model: openrouter/google/lyria-3-pro-preview
+      api_key: os.environ/OPENROUTER_API_KEY
+      tpm: 200000
+      rpm: 1
+    model_info:
+      input_cost_per_token: 0
+      output_cost_per_token: 0
+      mode: chat
+
+  - model_name: lyria-3-pro
+    litellm_params:
+      model: gemini/lyria-3-pro-preview
+      api_key: os.environ/GEMINI_API_KEY
+      tpm: 200000
+      rpm: 2
+    model_info:
+      input_cost_per_token: 0
+      output_cost_per_token: 0
+      mode: chat
+
+
+  # ===========================================================================
+  # qwen3-32b  –  3 FREE PROVIDERS
+  # ===========================================================================
+  - model_name: qwen3-32b
+    litellm_params:
+      model: groq/qwen/qwen3-32b
+      api_key: os.environ/GROQ_API_KEY
+      tpm: 8000
+      rpm: 2
+    model_info:
+      input_cost_per_token: 0
+      output_cost_per_token: 0
+      mode: chat
+
+  - model_name: qwen3-32b
+    litellm_params:
+      model: huggingface/Qwen/Qwen3-32B
+      api_key: os.environ/HF_TOKEN
+      tpm: 200000
+      rpm: 30
+    model_info:
+      input_cost_per_token: 0
+      output_cost_per_token: 0
+      mode: chat
+
+  - model_name: qwen3-32b
+    litellm_params:
+      model: openai/Qwen3-32B
+      api_key: os.environ/OVHCLOUD_API_KEY
+      api_base: https://oai.endpoints.kepler.ai.cloud.ovh.net/v1
+      tpm: 200000
+      rpm: 2
+    model_info:
+      input_cost_per_token: 0
+      output_cost_per_token: 0
+      mode: chat
+
+
+  # ===========================================================================
+  # qwen3-5-397b-a17b  –  2 FREE PROVIDERS
+  # ===========================================================================
+  - model_name: qwen3-5-397b-a17b
+    litellm_params:
+      model: huggingface/Qwen/Qwen3.5-397B-A17B
+      api_key: os.environ/HF_TOKEN
+      tpm: 200000
+      rpm: 30
+    model_info:
+      input_cost_per_token: 0
+      output_cost_per_token: 0
+      mode: chat
+
+  - model_name: qwen3-5-397b-a17b
+    litellm_params:
+      model: openai/Qwen3.5-397B-A17B
+      api_key: os.environ/OVHCLOUD_API_KEY
+      api_base: https://oai.endpoints.kepler.ai.cloud.ovh.net/v1
+      tpm: 200000
+      rpm: 2
+    model_info:
+      input_cost_per_token: 0
+      output_cost_per_token: 0
+      mode: chat
+
+
+  # ===========================================================================
+  # qwen3-5-9b  –  2 FREE PROVIDERS
+  # ===========================================================================
+  - model_name: qwen3-5-9b
+    litellm_params:
+      model: huggingface/Qwen/Qwen3.5-9B
+      api_key: os.environ/HF_TOKEN
+      tpm: 200000
+      rpm: 30
+    model_info:
+      input_cost_per_token: 0
+      output_cost_per_token: 0
+      mode: chat
+
+  - model_name: qwen3-5-9b
+    litellm_params:
+      model: openai/Qwen3.5-9B
+      api_key: os.environ/OVHCLOUD_API_KEY
+      api_base: https://oai.endpoints.kepler.ai.cloud.ovh.net/v1
+      tpm: 200000
+      rpm: 2
+    model_info:
+      input_cost_per_token: 0
+      output_cost_per_token: 0
+      mode: chat
+
+
+  # ===========================================================================
+  # qwen3-6-27b  –  3 FREE PROVIDERS
+  # ===========================================================================
+  - model_name: qwen3-6-27b
+    litellm_params:
+      model: groq/qwen/qwen3.6-27b
+      api_key: os.environ/GROQ_API_KEY
+      tpm: 8000
+      rpm: 2
+    model_info:
+      input_cost_per_token: 0
+      output_cost_per_token: 0
+      mode: chat
+
+  - model_name: qwen3-6-27b
+    litellm_params:
+      model: huggingface/Qwen/Qwen3.6-27B
+      api_key: os.environ/HF_TOKEN
+      tpm: 200000
+      rpm: 30
+    model_info:
+      input_cost_per_token: 0
+      output_cost_per_token: 0
+      mode: chat
+
+  - model_name: qwen3-6-27b
+    litellm_params:
+      model: openai/Qwen3.6-27B
+      api_key: os.environ/OVHCLOUD_API_KEY
+      api_base: https://oai.endpoints.kepler.ai.cloud.ovh.net/v1
+      tpm: 200000
+      rpm: 2
+    model_info:
+      input_cost_per_token: 0
+      output_cost_per_token: 0
+      mode: chat
+
+
+  # ===========================================================================
+  # qwen3-coder-30b-a3b  –  2 FREE PROVIDERS
+  # ===========================================================================
+  - model_name: qwen3-coder-30b-a3b
+    litellm_params:
+      model: huggingface/Qwen/Qwen3-Coder-30B-A3B-Instruct
+      api_key: os.environ/HF_TOKEN
+      tpm: 200000
+      rpm: 30
+    model_info:
+      input_cost_per_token: 0
+      output_cost_per_token: 0
+      mode: chat
+
+  - model_name: qwen3-coder-30b-a3b
+    litellm_params:
+      model: openai/Qwen3-Coder-30B-A3B-Instruct
+      api_key: os.environ/OVHCLOUD_API_KEY
+      api_base: https://oai.endpoints.kepler.ai.cloud.ovh.net/v1
+      tpm: 200000
+      rpm: 2
+    model_info:
+      input_cost_per_token: 0
+      output_cost_per_token: 0
+      mode: chat
+
+
+  # ===========================================================================
+  # qwen3-next-80b-a3b  –  2 FREE PROVIDERS
+  # ===========================================================================
+  - model_name: qwen3-next-80b-a3b
+    litellm_params:
+      model: openrouter/qwen/qwen3-next-80b-a3b-instruct:free
+      api_key: os.environ/OPENROUTER_API_KEY
+      tpm: 200000
+      rpm: 1
+    model_info:
+      input_cost_per_token: 0
+      output_cost_per_token: 0
+      mode: chat
+
+  - model_name: qwen3-next-80b-a3b
+    litellm_params:
+      model: huggingface/Qwen/Qwen3-Next-80B-A3B-Instruct
+      api_key: os.environ/HF_TOKEN
+      tpm: 200000
+      rpm: 30
+    model_info:
+      input_cost_per_token: 0
+      output_cost_per_token: 0
+      mode: chat
+
+
+  # ===========================================================================
+  # v4  –  2 FREE PROVIDERS
+  # ===========================================================================
+  - model_name: v4
+    litellm_params:
+      model: openai/deepseek-v4-pro
+      api_key: os.environ/OPENCODE_ZEN_API_KEY
+      api_base: https://opencode.ai/zen/v1
+      tpm: 200000
+      rpm: 10
+    model_info:
+      input_cost_per_token: 0
+      output_cost_per_token: 0
+      mode: chat
+
+  - model_name: v4
+    litellm_params:
+      model: huggingface/deepseek-ai/DeepSeek-V4-Pro
+      api_key: os.environ/HF_TOKEN
+      tpm: 200000
+      rpm: 30
+    model_info:
+      input_cost_per_token: 0
+      output_cost_per_token: 0
+      mode: chat
+
+
+  # ===========================================================================
+  # whisper-large-v3  –  2 FREE PROVIDERS
+  # ===========================================================================
+  - model_name: whisper-large-v3
+    litellm_params:
+      model: groq/whisper-large-v3
+      api_key: os.environ/GROQ_API_KEY
+      tpm: 8000
+      rpm: 2
+    model_info:
+      input_cost_per_token: 0
+      output_cost_per_token: 0
+      mode: chat
+
+  - model_name: whisper-large-v3
+    litellm_params:
+      model: openai/whisper-large-v3
+      api_key: os.environ/OVHCLOUD_API_KEY
+      api_base: https://oai.endpoints.kepler.ai.cloud.ovh.net/v1
+      tpm: 200000
+      rpm: 2
+    model_info:
+      input_cost_per_token: 0
+      output_cost_per_token: 0
+      mode: chat
+
+
+  # ===========================================================================
+  # whisper-large-v3-turbo  –  2 FREE PROVIDERS
+  # ===========================================================================
+  - model_name: whisper-large-v3-turbo
+    litellm_params:
+      model: groq/whisper-large-v3-turbo
+      api_key: os.environ/GROQ_API_KEY
+      tpm: 8000
+      rpm: 2
+    model_info:
+      input_cost_per_token: 0
+      output_cost_per_token: 0
+      mode: chat
+
+  - model_name: whisper-large-v3-turbo
+    litellm_params:
+      model: openai/whisper-large-v3-turbo
+      api_key: os.environ/OVHCLOUD_API_KEY
+      api_base: https://oai.endpoints.kepler.ai.cloud.ovh.net/v1
+      tpm: 200000
+      rpm: 2
+    model_info:
+      input_cost_per_token: 0
+      output_cost_per_token: 0
+      mode: chat
+
 # =============================================================================
 # Router Settings  –  Load Balancing, Fallback & Cooldown
 # =============================================================================
@@ -944,6 +1455,20 @@ router_settings:
     - {"codestral-latest":          ["mistral-small-3.2", "mistral-large", "llama-3.3-70b-instruct"]}
     - {"*":                         ["llama-3.1-8b", "gpt-oss-20b", "gemma-4-26b-a4b-it", "deepseek-v4-flash", "openrouter-free"]}
 
+    - {"gpt-oss-safeguard-20b": ["gpt-oss-120b", "llama-3.3-70b-instruct", "mistral-large", "gpt-oss-20b"]}
+    - {"k2-5": ["gpt-oss-120b", "llama-3.3-70b-instruct", "mistral-large", "gpt-oss-20b"]}
+    - {"k2-7-code": ["gpt-oss-120b", "llama-3.3-70b-instruct", "mistral-large", "gpt-oss-20b"]}
+    - {"lyria-3-clip": ["gpt-oss-120b", "llama-3.3-70b-instruct", "mistral-large", "gpt-oss-20b"]}
+    - {"lyria-3-pro": ["gpt-oss-120b", "llama-3.3-70b-instruct", "mistral-large", "gpt-oss-20b"]}
+    - {"qwen3-32b": ["gpt-oss-120b", "llama-3.3-70b-instruct", "mistral-large", "gpt-oss-20b"]}
+    - {"qwen3-5-397b-a17b": ["gpt-oss-120b", "llama-3.3-70b-instruct", "mistral-large", "gpt-oss-20b"]}
+    - {"qwen3-5-9b": ["gpt-oss-120b", "llama-3.3-70b-instruct", "mistral-large", "gpt-oss-20b"]}
+    - {"qwen3-6-27b": ["gpt-oss-120b", "llama-3.3-70b-instruct", "mistral-large", "gpt-oss-20b"]}
+    - {"qwen3-coder-30b-a3b": ["gpt-oss-120b", "llama-3.3-70b-instruct", "mistral-large", "gpt-oss-20b"]}
+    - {"qwen3-next-80b-a3b": ["gpt-oss-120b", "llama-3.3-70b-instruct", "mistral-large", "gpt-oss-20b"]}
+    - {"v4": ["gpt-oss-120b", "llama-3.3-70b-instruct", "mistral-large", "gpt-oss-20b"]}
+    - {"whisper-large-v3": ["gpt-oss-120b", "llama-3.3-70b-instruct", "mistral-large", "gpt-oss-20b"]}
+    - {"whisper-large-v3-turbo": ["gpt-oss-120b", "llama-3.3-70b-instruct", "mistral-large", "gpt-oss-20b"]}
   context_window_fallbacks:
     - {"llama-3.1-8b":              ["llama-3.3-70b-instruct", "gpt-oss-120b", "mistral-large", "nemotron-3-120b"]}
     - {"deepseek-v4-flash":         ["mistral-large", "llama-3.3-70b-instruct", "nemotron-3-ultra"]}

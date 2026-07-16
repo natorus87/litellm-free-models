@@ -1,6 +1,7 @@
 # Render-Backups (render-config.py, find-shared-models.py, generate-config.py)
 config.yaml.bak.*
 config.yaml.tmp
+config.template.yaml.bak.*
 multi-instance/master/config.yaml.bak.*
 multi-instance/master/config.yaml.tmp
 

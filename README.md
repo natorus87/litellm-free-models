@@ -32,7 +32,7 @@ A [LiteLLM](https://github.com/BerriAI/litellm) proxy that aggregates **exclusiv
 
 ## ✨ Features
 
-- **13 providers, 22 models** — OpenRouter, Cerebras, Groq, Cloudflare Workers AI, Google AI Studio, NVIDIA NIM, Mistral, Cohere, GitHub Models, OpenCode Zen, LLM7.io, HuggingFace Inference API, OVHcloud.
+- **13 providers, 36 models** — OpenRouter, Cerebras, Groq, Cloudflare Workers AI, Google AI Studio, NVIDIA NIM, Mistral, Cohere, GitHub Models, OpenCode Zen, LLM7.io, HuggingFace Inference API, OVHcloud.
 - **Rate-limit-aware load balancing** — `usage-based-routing-v2` routes to deployments that still have `tpm`/`rpm` budget (a 1-RPM OpenRouter deployment no longer receives as much traffic as a 40-RPM NVIDIA one). With Redis, usage and cooldowns are tracked **across all instances/replicas**.
 - **Fallback chains** — each model has a prioritized list of fallbacks (e.g. `gpt-oss-120b` → `gpt-oss-20b` → `llama-3.3-70b-instruct`).
 - **Shared Redis cache** — response cache (5 min TTL, see [Response Cache](#-response-cache)) + virtual-key auth cache across replicas. Fully optional: without `REDIS_HOST` the config renders Redis-free.
@@ -40,7 +40,7 @@ A [LiteLLM](https://github.com/BerriAI/litellm) proxy that aggregates **exclusiv
 - **Live pricing report** — `find-shared-models.py` shows hypothetical savings vs. paid-tier prices (LiteLLM reference DB).
 - **Multi-instance setup** — Master + 2 Slaves in `multi-instance/` triple the effective rate limits (for separate hosts/IPs, see [Multi-Instance](#-multi-instance)).
 - **Template pipeline** — `config.template.yaml` is the single source of truth; `render-config.py` renders `config.yaml` from it with `{{ENV_VAR}}` substitution, provider filtering, and fallback-target validation.
-- **89 unit tests** — including structural invariant tests (fallback targets must exist, ≥ 2-provider rule).
+- **96 unit tests** — including structural invariant tests (fallback targets must exist, ≥ 2-provider rule).
 
 ---
 
@@ -120,7 +120,7 @@ Response: JSON object with `choices[0].message.content` (OpenAI-compatible forma
                   ┌─────────────────────────────────────────┐
                   │       LiteLLM Proxy (:4000 internal)    │
                   │     Routing: usage-based-routing-v2     │
-   Client ──────► │     22 model_names, 69 deployments      │
+   Client ──────► │     36 model_names, 109 deployments      │
    (Port 4444)   │     Cooldown 30s, Retries 2             │
                   └────────────┬────────────────────────────┘
                                │
@@ -140,7 +140,7 @@ In the [`multi-instance/`](multi-instance/README.md) directory an additional mas
 ```
                   ┌──────────────────────────────────┐
                   │   MASTER (:4000, own keys)       │
-   Client ──────► │   69 direct + 44 slave backends  │
+   Client ──────► │   99 direct + 72 slave backends  │
                   └──────────────┬───────────────────┘
                                  │
                 ┌────────────────┼────────────────┐
@@ -182,31 +182,45 @@ Sign-up URLs for the keys: see comments in [`.env.example`](.env.example).
 ## 🤖 Models
 
 <!-- BEGIN GENERATED MODEL MATRIX (python3 find-shared-models.py --write-docs) -->
-Stand (aus `config.template.yaml` generiert): **22 model_names, 69 base-Deployments**. `render-config.py` entfernt Deployments von Providern ohne API-Key in `.env` – die effektive Anzahl kann daher kleiner sein.
+Stand (aus `config.template.yaml` generiert): **36 model_names, 109 base-Deployments**. `render-config.py` entfernt Deployments von Providern ohne API-Key in `.env` – die effektive Anzahl kann daher kleiner sein.
 
 | model_name | Deployments | Provider |
 |---|---|---|
 | `gpt-oss-120b` | 7 | OpenRouter, Cerebras, Groq, Cloudflare, NVIDIA, OVHcloud, HuggingFace |
-| `gpt-oss-20b` | 6 | OpenRouter, Groq, Cloudflare, NVIDIA, OVHcloud, HuggingFace |
+| `gpt-oss-20b` | 7 | OpenRouter, Groq, Cloudflare, NVIDIA, OVHcloud, HuggingFace, LLM7.io |
+| `deepseek-v4-flash` | 6 | OpenRouter, NVIDIA, OpenCode Zen, HuggingFace, LLM7.io |
+| `kimi-k2.6` | 6 | OpenRouter, Cloudflare, NVIDIA, OpenCode Zen, LLM7.io, HuggingFace |
 | `llama-3.3-70b-instruct` | 6 | OpenRouter, Groq, Cloudflare, GitHub Models, OVHcloud, HuggingFace |
+| `gemma-4-31b-it` | 5 | OpenRouter, NVIDIA, HuggingFace, Cerebras, Google AI Studio |
 | `llama-3.1-8b` | 5 | Groq, Cloudflare, NVIDIA, GitHub Models, HuggingFace |
-| `deepseek-v4-flash` | 4 | OpenRouter, NVIDIA, OpenCode Zen, HuggingFace |
+| `gemma-4-26b-a4b-it` | 4 | OpenRouter, Cloudflare, HuggingFace, Google AI Studio |
 | `llama-4-maverick` | 4 | Groq, OpenRouter, NVIDIA, HuggingFace |
 | `llama-4-scout` | 4 | Groq, Cloudflare, GitHub Models, HuggingFace |
-| `gemma-4-26b-a4b-it` | 3 | OpenRouter, Cloudflare, HuggingFace |
-| `gemma-4-31b-it` | 3 | OpenRouter, NVIDIA, HuggingFace |
-| `kimi-k2.6` | 3 | OpenRouter, Cloudflare, NVIDIA |
 | `nemotron-3-120b` | 3 | OpenRouter, Cloudflare, NVIDIA |
 | `nemotron-3-nano-30b` | 3 | OpenRouter, NVIDIA, HuggingFace |
 | `nemotron-3-ultra` | 3 | OpenRouter, OpenCode Zen, NVIDIA |
+| `qwen3-32b` | 3 | Groq, HuggingFace, OVHcloud |
+| `qwen3-6-27b` | 3 | Groq, HuggingFace, OVHcloud |
 | `codestral-latest` | 2 | LLM7.io, Mistral |
 | `command-r-plus` | 2 | Cohere, GitHub Models |
 | `deepseek-r1-0528` | 2 | LLM7.io, HuggingFace |
+| `gpt-oss-safeguard-20b` | 2 | Groq, HuggingFace |
+| `k2-5` | 2 | OpenCode Zen, HuggingFace |
+| `k2-7-code` | 2 | OpenCode Zen, HuggingFace |
+| `lyria-3-clip` | 2 | OpenRouter, Google AI Studio |
+| `lyria-3-pro` | 2 | OpenRouter, Google AI Studio |
 | `mistral-large` | 2 | Mistral, GitHub Models |
 | `mistral-small-3.2` | 2 | LLM7.io, Mistral |
+| `north-mini-code` | 2 | OpenCode Zen, OpenRouter |
 | `qwen3-235b` | 2 | LLM7.io, HuggingFace |
+| `qwen3-5-397b-a17b` | 2 | HuggingFace, OVHcloud |
+| `qwen3-5-9b` | 2 | HuggingFace, OVHcloud |
+| `qwen3-coder-30b-a3b` | 2 | HuggingFace, OVHcloud |
+| `qwen3-next-80b-a3b` | 2 | OpenRouter, HuggingFace |
+| `v4` | 2 | OpenCode Zen, HuggingFace |
+| `whisper-large-v3` | 2 | Groq, OVHcloud |
+| `whisper-large-v3-turbo` | 2 | Groq, OVHcloud |
 | `big-pickle` | 1 | OpenCode Zen |
-| `north-mini-code` | 1 | OpenCode Zen |
 | `openrouter-free` | 1 | OpenRouter |
 <!-- END GENERATED MODEL MATRIX -->
 
@@ -322,7 +336,7 @@ Recommendations for operating the proxy (nothing is force-enabled by default):
 ## 🧪 Tests
 
 ```bash
-make test                # 89 unit tests, ~1s
+make test                # 96 unit tests, ~1s
 ```
 
 The suite covers five modules:
@@ -355,7 +369,7 @@ The tests use only the Python standard library (`unittest`).
 | `make docker-compose-up` / `make docker-compose-down`    | Control docker-compose                                 |
 | `make docker-build` / `make docker-run`                  | Build / run the custom image (standalone, without Redis) |
 | `make backup-db` / `make restore-db`                     | Dump / restore the Compose Postgres DB (`./backups/`)  |
-| `make test`                                              | Run 89 unit tests                                      |
+| `make test`                                              | Run 96 unit tests                                      |
 | `make lint` / `make format`                              | Run ruff linter / formatter                            |
 | `make clean`                                             | Remove generated/temporary files (backups, reports)    |
 | `make install-dev`                                       | Install dev dependencies and pre-commit hooks          |
@@ -413,8 +427,8 @@ More detailed docs on `find-shared-models.py` and output formats: [`AGENTS.md`](
 
 The [`multi-instance/`](multi-instance/README.md) directory contains a complete master/slave setup:
 
-- **Master** with 113 deployments (69 direct + 44 slave backends)
-- **2 Slaves** with 69 deployments each under different API keys
+- **Master** with 171 deployments (99 direct + 72 slave backends)
+- **2 Slaves** with 99 deployments each under different API keys
 - Provider API keys per instance (`master/.env`, `slave1/.env`, `slave2/.env`); shared Redis/Postgres passwords in the project-level `multi-instance/.env`
 - Dedicated docker-compose and Kubernetes manifests (`multi-instance/k8s/`)
 - Kustomize setup for declarative deployment (Redis manifests are shared with the single-instance setup via the `k8s/redis/` base)

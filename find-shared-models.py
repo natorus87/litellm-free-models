@@ -75,6 +75,64 @@ STOPWORDS = {
     "instruct", "chat", "base", "preview", "experimental", "free",
 }
 
+# ---------------------------------------------------------------------------
+# Paid-Vendor-Denylist
+# ---------------------------------------------------------------------------
+# Aggregatoren wie OpenCode Zen und LLM7.io mischen echte Open-Weight-Modelle
+# mit (vermutlich proxied/resold) Zugriff auf kostenpflichtige Flaggschiff-
+# APIs grosser Anbieter unter deren Markennamen (z.B. "claude-opus-4-8",
+# "gpt-5.4", "gemini-3.5-flash", "grok-4.5", "glm-5.x", "minimax-m..."). Diese
+# Anbieter (Anthropic, OpenAI-GPT-Linie, Google Gemini, xAI, Zhipu/GLM-5,
+# MiniMax) veroeffentlichen ihre Flaggschiff-Modelle NICHT offen -- ein
+# "Free-Tier"-Proxy darf solche Eintraege nie automatisch als kostenlos
+# uebernehmen (irrefuehrend + ToS-Risiko), unabhaengig davon, welcher
+# Provider sie listet. Am 2026-07-16 in der Praxis in genau dieser Form bei
+# OpenCode Zen + LLM7.io aufgetreten.
+#
+# EXPLIZIT AUSGENOMMEN, weil es sich um echte Open-Weight-Linien handelt:
+#   gpt-oss   (OpenAIs offene Modelle, nicht die "gpt-5"/"gpt-4"-Flaggschiffe)
+#   gemma     (Googles offene Modelle, nicht "gemini")
+#   kimi/moonshotai (Moonshot AI open-sourced die komplette K2-Familie;
+#                    kimi-k2.6 ist bereits ein etabliertes Deployment)
+#   deepseek, qwen, llama, mistral, nemotron, command-r, codestral (etabliert)
+#
+# Anthropic, OpenAIs GPT-Linie, Googles Gemini und xAI veroeffentlichen
+# diese Flaggschiff-Modelle NIE als offene Gewichte -- Deny gilt daher
+# ueberall, unabhaengig vom Provider.
+PAID_VENDOR_PATTERNS = [
+    re.compile(r"(?:^|/)claude(?:-|$)", re.IGNORECASE),
+    re.compile(r"(?:^|/)gpt-5(?:\.\d+)?(?:-|$)", re.IGNORECASE),
+    re.compile(r"(?:^|/)gpt-4", re.IGNORECASE),
+    re.compile(r"(?:^|/)gemini(?:-|$)", re.IGNORECASE),
+    re.compile(r"(?:^|/)grok(?:-|$)", re.IGNORECASE),
+]
+
+# GLM (Zhipu/Z.ai) und MiniMax veroeffentlichen TEILWEISE offene Gewichte
+# (z.B. auf HuggingFace, wo strukturell nur echte Checkpoints liegen
+# koennen -- man kann kein API-only-Modell dorthin hochladen). Bei den
+# API-Aggregatoren OpenCode Zen/LLM7.io ist dagegen unklar, ob "glm-5"/
+# "minimax-m2.7" der offene Checkpoint oder die kostenpflichtige Flaggschiff-
+# API ist -- dort werden sie sicherheitshalber ausgefiltert.
+AMBIGUOUS_VENDOR_PATTERNS = [
+    re.compile(r"(?:^|/)glm-5", re.IGNORECASE),
+    re.compile(r"(?:^|/)minimax", re.IGNORECASE),
+]
+AGGREGATOR_PROVIDERS = {"opencode-zen", "llm7io"}
+
+
+def is_paid_vendor_model(model_id: str, provider: str = "") -> bool:
+    """True, wenn model_id zu einem bekannten kostenpflichtigen
+    Flaggschiff-Modell eines grossen Anbieters passt (siehe
+    PAID_VENDOR_PATTERNS-Kommentar fuer die Begruendung + Ausnahmen).
+    `provider` steuert die zusaetzliche Ambiguous-Denylist (GLM-5/MiniMax),
+    die nur bei den API-Aggregatoren greift, nicht bei Open-Weight-Hosts
+    wie HuggingFace."""
+    if any(p.search(model_id) for p in PAID_VENDOR_PATTERNS):
+        return True
+    if provider in AGGREGATOR_PROVIDERS:
+        return any(p.search(model_id) for p in AMBIGUOUS_VENDOR_PATTERNS)
+    return False
+
 
 def load_env(path: Path) -> dict[str, str]:
     env: dict[str, str] = {}
@@ -94,8 +152,15 @@ def load_env(path: Path) -> dict[str, str]:
 HTTP_RETRIES = 3
 HTTP_BACKOFF_SECONDS = (1, 3)  # Wartezeit vor Retry 2 bzw. 3
 
+# Mehrere Provider (Cerebras, Groq, OpenCode Zen) sitzen hinter Cloudflares
+# Bot-Schutz, der urllib's Default-User-Agent ("Python-urllib/3.x") blockt
+# (403, "error code: 1010" -- ein WAF-Block, KEIN Auth-Fehler trotz 403).
+# Ein browser-aehnlicher User-Agent umgeht das zuverlaessig.
+DEFAULT_USER_AGENT = "Mozilla/5.0 (X11; Linux x86_64) litellm-free-models/find-shared-models.py"
+
 
 def http_get_json(url: str, headers: dict[str, str], timeout: int = 30) -> any:
+    headers = {"User-Agent": DEFAULT_USER_AGENT, **headers}
     last_exc: Exception | None = None
     for attempt in range(HTTP_RETRIES):
         try:
@@ -364,6 +429,10 @@ HF_FALLBACK_MODELS = [
 # HF-Fallback-Liste). Solche Kataloge duerfen nicht fuer die
 # Stale-Deployment-Erkennung benutzt werden (falsche Positive).
 PARTIAL_CATALOGS: set[str] = set()
+
+# { provider: [model_id, ...] } -- vom Paid-Vendor-Filter ausgefilterte
+# Modelle des aktuellen Laufs (fuer Transparenz im Report).
+PAID_FILTERED: dict[str, list[str]] = {}
 
 
 def fetch_huggingface(token: str) -> list[str]:
@@ -673,7 +742,18 @@ def parse_config(path: Path) -> tuple[list[str], int, int, dict[str, list[dict]]
       - parsed existing models: { model_name: [ {provider, model_id, ic, oc, line_start, line_end} ] }
     """
     lines = path.read_text(encoding="utf-8").splitlines(keepends=True)
+    model_list_start, model_list_end = _find_model_list_bounds(lines)
+    existing = _scan_existing_blocks(lines, model_list_start, model_list_end)
+    return lines, model_list_start, model_list_end, existing
 
+
+def _find_model_list_bounds(lines: list[str]) -> tuple[int, int]:
+    """Liefert (model_list_start, model_list_end) fuer eine gegebene
+    Zeilenliste. Wiederverwendet fuer sowohl die initiale Datei als auch
+    fuer bereits strukturell veraenderte new_lines (siehe apply_to_config:
+    Indizes verschieben sich nach jeder Einfuegung, daher muss nach
+    Struktur-Mutationen NEU gescannt werden statt alte Indizes weiter zu
+    benutzen)."""
     model_list_start = -1
     model_list_end = len(lines)
     for i, line in enumerate(lines):
@@ -686,7 +766,19 @@ def parse_config(path: Path) -> tuple[list[str], int, int, dict[str, list[dict]]
             if stripped and not lines[i].startswith(" "):
                 model_list_end = i
                 break
+    return model_list_start, model_list_end
 
+
+def _scan_existing_blocks(
+    lines: list[str], model_list_start: int, model_list_end: int
+) -> dict[str, list[dict]]:
+    """Scannt die Deployment-Bloecke zwischen model_list_start/-end und
+    liefert { model_name: [ {provider, model_id, ic, oc, line_start,
+    line_end}, ... ] }. Ausgelagert aus parse_config(), damit
+    apply_to_config() nach Struktur-Mutationen (neue Bloecke, Insertions)
+    frische line_start/line_end fuer den Kosten-Patch-Schritt bekommen kann
+    -- alte, vor der Mutation berechnete Indizes zeigen danach auf falsche
+    Zeilen (siehe Kommentar in apply_to_config)."""
     existing: dict[str, list[dict]] = {}
     current_mn: str | None = None
     current_block_start = -1
@@ -746,19 +838,26 @@ def parse_config(path: Path) -> tuple[list[str], int, int, dict[str, list[dict]]
             current_block_start = i
             current_block_lines = [line]
         elif current_mn is not None:
-            if not line.strip() and i + 1 < model_list_end:
-                # Leerzeile am Block-Ende? Nur flushen wenn der naechste Eintrag
-                # mit "- model_name:" startet
-                next_line = lines[i + 1] if i + 1 < len(lines) else ""
-                if next_line.lstrip().startswith("- model_name:"):
-                    flush()
-                    current_mn = None
-                    current_block_lines = []
-                    continue
+            if not line.strip():
+                # Leerzeile beendet IMMER den aktuellen Block. Deployment-
+                # Bloecke haben laut Konvention (siehe build_deployment())
+                # nie interne Leerzeilen. Die fruehere Version schaute nur
+                # 1 Zeile voraus und flushte nur, wenn direkt danach
+                # "- model_name:" kam -- folgte stattdessen ein Kommentar-
+                # Header (Leerzeile + 3 "#"-Zeilen vor dem naechsten
+                # Deployment), wurde der Header faelschlich in den aktuellen
+                # Block hineingezogen und dessen line_end um die Header-
+                # Laenge zu gross berechnet. Das liess apply_to_config neue
+                # Deployments MITTEN in den falsch begrenzten Vorgaenger-
+                # Block einfuegen statt danach.
+                flush()
+                current_mn = None
+                current_block_lines = []
+                continue
             current_block_lines.append(line)
     flush()
 
-    return lines, model_list_start, model_list_end, existing
+    return existing
 
 
 def model_id_key(provider: str, model_id: str) -> str:
@@ -926,16 +1025,23 @@ def apply_to_config(
             if new_lines:
                 insertions.append((last_idx + 1, new_lines))
 
-    # 5) Anwenden: zuerst neue Bloecke am Listenende, dann Insertions in
-    #    bestehende Bloecke (von hinten nach vorne, damit Indizes stabil)
+    # 5) Anwenden: ERST neue Bloecke bei ml_end, DANN Insertions in
+    #    bestehende Bloecke (von hinten nach vorne).
+    #
+    #    Reihenfolge ist kein Stildetail: ml_end wurde EINMALIG aus dem
+    #    unveraenderten `lines` berechnet. Insertions (Schritt 4) fuegen
+    #    Zeilen an Indizes < ml_end ein und verschieben damit alles danach
+    #    nach hinten -- wuerden sie ZUERST angewendet, waere der (unan-
+    #    gepasste) ml_end-Index in der gewachsenen new_lines-Liste um genau
+    #    die Menge zu KLEIN und die new_blocks-Splice laendete irgendwo
+    #    MITTEN im model_list (live beobachtet: ein kompletter Batch neuer
+    #    Modell-Bloecke zerriss den bestehenden deepseek-r1-0528-Block).
+    #    Fuegt man new_blocks dagegen ZUERST bei ml_end ein (new_lines ist
+    #    an dieser Stelle noch identisch mit `lines`, der Index also noch
+    #    gueltig), bleiben alle Insertion-Indizes (< ml_end) unberuehrt.
     new_lines = list(lines)
     added_count = 0
     costs_updated = 0
-
-    # Insertions (von hinten)
-    for idx, new_block in sorted(insertions, key=lambda x: -x[0]):
-        new_lines[idx:idx] = new_block
-        added_count += sum(1 for ln in new_block if ln.strip().startswith("- model_name:"))
 
     # Neue Bloecke vor ml_end (das ist die Position von router_settings:)
     if new_blocks:
@@ -947,9 +1053,25 @@ def apply_to_config(
             if ln.strip().startswith("- model_name:")
         )
 
+    # Insertions (von hinten, damit sich die Indizes untereinander nicht
+    # invalidieren) -- alle Indizes sind < ml_end und damit von der
+    # new_blocks-Splice oben unberuehrt.
+    for idx, new_block in sorted(insertions, key=lambda x: -x[0]):
+        new_lines[idx:idx] = new_block
+        added_count += sum(1 for ln in new_block if ln.strip().startswith("- model_name:"))
+
     # 6) Kosten-Update fuer bestehende Eintraege mit 0-Werten
+    #
+    # WICHTIG: `existing` (aus dem urspruenglichen parse_config()-Call) hat
+    # line_start/line_end aus dem UNVERAENDERTEN Text. new_lines wurde
+    # oben aber bereits durch new_blocks + insertions strukturell veraendert
+    # -- ein Rescan ist zwingend, sonst patcht dieser Schritt Kosten-Zeilen
+    # an FALSCHEN (verschobenen) Positionen (dieselbe Bug-Klasse wie die
+    # new_blocks/ml_end-Korruption oben, hier fuer den Cost-Patch-Schritt).
     if pricing is not None:
-        new_lines, costs_updated = _update_existing_costs(new_lines, existing, plan)
+        fresh_ml_start, fresh_ml_end = _find_model_list_bounds(new_lines)
+        fresh_existing = _scan_existing_blocks(new_lines, fresh_ml_start, fresh_ml_end)
+        new_lines, costs_updated = _update_existing_costs(new_lines, fresh_existing, plan)
 
     # 7) Fallbacks ergaenzen
     new_lines, fallbacks_added = _update_fallbacks(new_lines, existing_model_names, adds_by_model)
@@ -1142,6 +1264,7 @@ def collect_models(env: dict[str, str]) -> tuple[dict[str, list[str]], list[tupl
     """
     from concurrent.futures import ThreadPoolExecutor
 
+    PAID_FILTERED.clear()
     raw: dict[str, list[str]] = {}
     errors: list[tuple[str, str]] = []
     futures = {}
@@ -1159,10 +1282,15 @@ def collect_models(env: dict[str, str]) -> tuple[dict[str, list[str]], list[tupl
             if fut is None:
                 continue
             try:
-                models = sorted({m for m in fut.result() if m})
+                fetched = [m for m in fut.result() if m]
+                paid = sorted({m for m in fetched if is_paid_vendor_model(m, name)})
+                models = sorted({m for m in fetched if not is_paid_vendor_model(m, name)})
                 raw[name] = models
                 partial = "  (unvollstaendiger Fallback-Katalog)" if name in PARTIAL_CATALOGS else ""
-                print(f"  [OK]   {name:14s} {len(models):4d} Modelle{partial}")
+                paid_note = f"  ({len(paid)} kostenpflichtige Flaggschiff-Modelle ausgefiltert)" if paid else ""
+                print(f"  [OK]   {name:14s} {len(models):4d} Modelle{partial}{paid_note}")
+                if paid:
+                    PAID_FILTERED.setdefault(name, []).extend(paid)
             except Exception as exc:
                 errors.append((name, f"{type(exc).__name__}: {exc}"))
                 print(f"  [FAIL] {name:14s} {type(exc).__name__}: {exc}")
@@ -1360,6 +1488,21 @@ def write_report(
     # ------------------------------------------------------------------
     # Verwaiste Template-Deployments (Modell nicht mehr im Provider-Katalog)
     # ------------------------------------------------------------------
+    lines.append("─" * 78)
+    lines.append("Ausgefilterte kostenpflichtige Flaggschiff-Modelle (Paid-Vendor-Denylist)")
+    lines.append("─" * 78)
+    lines.append("  Aggregatoren (OpenCode Zen, LLM7.io, ...) listen teils Modelle unter")
+    lines.append("  Markennamen kostenpflichtiger Flaggschiff-APIs (Claude, GPT-5.x, Gemini,")
+    lines.append("  Grok, GLM-5.x, MiniMax) -- diese werden NIE automatisch uebernommen.")
+    if not PAID_FILTERED:
+        lines.append("  (keine gefunden)")
+    else:
+        for provider in sorted(PAID_FILTERED):
+            lines.append(f"\n  {provider}:")
+            for m in sorted(PAID_FILTERED[provider]):
+                lines.append(f"    - {m}")
+    lines.append("")
+
     lines.append("─" * 78)
     lines.append("Verwaiste Template-Deployments (Modell fehlt im Live-Katalog)")
     lines.append("─" * 78)

@@ -48,7 +48,7 @@ Client ──► MASTER (:4000, eigene Keys + Slave-Routing)
               └─► Slave 2 (:4002, andere API-Keys)
 ```
 
-Master: 69 direkte + 44 Slave-Deployments = **113 Deployments** (22 model_names × 2 Slaves zusätzlich). Slaves nutzen die base `config.yaml` per Docker-Volume-Mount.
+Master: 99 direkte + 72 Slave-Deployments = **171 Deployments** (36 model_names × 2 Slaves zusätzlich). Slaves nutzen die base `config.yaml` per Docker-Volume-Mount.
 
 **Positionierung (bewusste Entscheidung):** Multi-Key-Deployments in EINER Instanz haben denselben 3×-Effekt ohne den Overhead. Das Master/Slave-Setup ist nur für **getrennte Hosts/Egress-IPs** positioniert (IP-basierte Limits wie OVHcloud) — siehe README-Abschnitt "Multi-Instance".
 
@@ -93,31 +93,45 @@ Vollständige Env-Var-Liste inkl. `REDIS_*`/`POSTGRES_*`: siehe `.env.example` (
 Die Matrix wird **generiert** (`python3 find-shared-models.py --write-docs`), nicht von Hand gepflegt — CI prüft auf Drift:
 
 <!-- BEGIN GENERATED MODEL MATRIX (python3 find-shared-models.py --write-docs) -->
-Stand (aus `config.template.yaml` generiert): **22 model_names, 69 base-Deployments**. `render-config.py` entfernt Deployments von Providern ohne API-Key in `.env` – die effektive Anzahl kann daher kleiner sein.
+Stand (aus `config.template.yaml` generiert): **36 model_names, 109 base-Deployments**. `render-config.py` entfernt Deployments von Providern ohne API-Key in `.env` – die effektive Anzahl kann daher kleiner sein.
 
 | model_name | Deployments | Provider |
 |---|---|---|
 | `gpt-oss-120b` | 7 | OpenRouter, Cerebras, Groq, Cloudflare, NVIDIA, OVHcloud, HuggingFace |
-| `gpt-oss-20b` | 6 | OpenRouter, Groq, Cloudflare, NVIDIA, OVHcloud, HuggingFace |
+| `gpt-oss-20b` | 7 | OpenRouter, Groq, Cloudflare, NVIDIA, OVHcloud, HuggingFace, LLM7.io |
+| `deepseek-v4-flash` | 6 | OpenRouter, NVIDIA, OpenCode Zen, HuggingFace, LLM7.io |
+| `kimi-k2.6` | 6 | OpenRouter, Cloudflare, NVIDIA, OpenCode Zen, LLM7.io, HuggingFace |
 | `llama-3.3-70b-instruct` | 6 | OpenRouter, Groq, Cloudflare, GitHub Models, OVHcloud, HuggingFace |
+| `gemma-4-31b-it` | 5 | OpenRouter, NVIDIA, HuggingFace, Cerebras, Google AI Studio |
 | `llama-3.1-8b` | 5 | Groq, Cloudflare, NVIDIA, GitHub Models, HuggingFace |
-| `deepseek-v4-flash` | 4 | OpenRouter, NVIDIA, OpenCode Zen, HuggingFace |
+| `gemma-4-26b-a4b-it` | 4 | OpenRouter, Cloudflare, HuggingFace, Google AI Studio |
 | `llama-4-maverick` | 4 | Groq, OpenRouter, NVIDIA, HuggingFace |
 | `llama-4-scout` | 4 | Groq, Cloudflare, GitHub Models, HuggingFace |
-| `gemma-4-26b-a4b-it` | 3 | OpenRouter, Cloudflare, HuggingFace |
-| `gemma-4-31b-it` | 3 | OpenRouter, NVIDIA, HuggingFace |
-| `kimi-k2.6` | 3 | OpenRouter, Cloudflare, NVIDIA |
 | `nemotron-3-120b` | 3 | OpenRouter, Cloudflare, NVIDIA |
 | `nemotron-3-nano-30b` | 3 | OpenRouter, NVIDIA, HuggingFace |
 | `nemotron-3-ultra` | 3 | OpenRouter, OpenCode Zen, NVIDIA |
+| `qwen3-32b` | 3 | Groq, HuggingFace, OVHcloud |
+| `qwen3-6-27b` | 3 | Groq, HuggingFace, OVHcloud |
 | `codestral-latest` | 2 | LLM7.io, Mistral |
 | `command-r-plus` | 2 | Cohere, GitHub Models |
 | `deepseek-r1-0528` | 2 | LLM7.io, HuggingFace |
+| `gpt-oss-safeguard-20b` | 2 | Groq, HuggingFace |
+| `k2-5` | 2 | OpenCode Zen, HuggingFace |
+| `k2-7-code` | 2 | OpenCode Zen, HuggingFace |
+| `lyria-3-clip` | 2 | OpenRouter, Google AI Studio |
+| `lyria-3-pro` | 2 | OpenRouter, Google AI Studio |
 | `mistral-large` | 2 | Mistral, GitHub Models |
 | `mistral-small-3.2` | 2 | LLM7.io, Mistral |
+| `north-mini-code` | 2 | OpenCode Zen, OpenRouter |
 | `qwen3-235b` | 2 | LLM7.io, HuggingFace |
+| `qwen3-5-397b-a17b` | 2 | HuggingFace, OVHcloud |
+| `qwen3-5-9b` | 2 | HuggingFace, OVHcloud |
+| `qwen3-coder-30b-a3b` | 2 | HuggingFace, OVHcloud |
+| `qwen3-next-80b-a3b` | 2 | OpenRouter, HuggingFace |
+| `v4` | 2 | OpenCode Zen, HuggingFace |
+| `whisper-large-v3` | 2 | Groq, OVHcloud |
+| `whisper-large-v3-turbo` | 2 | Groq, OVHcloud |
 | `big-pickle` | 1 | OpenCode Zen |
-| `north-mini-code` | 1 | OpenCode Zen |
 | `openrouter-free` | 1 | OpenRouter |
 <!-- END GENERATED MODEL MATRIX -->
 
@@ -127,7 +141,7 @@ Stand (aus `config.template.yaml` generiert): **22 model_names, 69 base-Deployme
 
 ### Multi-Instance (zusätzlich)
 
-Master-Config: 69 base + 44 Slave = **113 Deployments**. Jeder Slave hat eigene 69 base Deployments (andere API-Keys) → effektiv 3× Rate-Limit pro Provider.
+Master-Config: 99 base + 72 Slave = **171 Deployments**. Jeder Slave hat eigene 99 base Deployments (andere API-Keys) → effektiv 3× Rate-Limit pro Provider.
 
 ---
 
@@ -192,7 +206,7 @@ Maßgeblich ist `config.template.yaml` (`router_settings.fallbacks` / `context_w
 │       ├── service.yaml
 │       └── secret.yaml.template
 │
-├── tests/                       # 89 Unit-Tests (unittest, stdlib-only)
+├── tests/                       # 96 Unit-Tests (unittest, stdlib-only)
 │   └── test_config_invariants.py  # Fallback-Ziele, ≥2-Provider-Regel, tpm/rpm-Lage, Redis-Marker
 │
 ├── .github/workflows/
@@ -233,7 +247,7 @@ docker compose up -d
 ## 7. Status & Bekannte Einschränkungen
 
 ### Abgeschlossen (Stand 2026-07-16)
-- ✅ 13 Provider integriert, 22 model_names / 69 base Deployments (generierte Matrix in §3)
+- ✅ 13 Provider integriert, 36 model_names / 109 base Deployments (generierte Matrix in §3)
 - ✅ Redis-Cache + Auth-Cache, **konditional gerendert** (ohne REDIS_HOST → Redis-frei)
 - ✅ `usage-based-routing-v2` mit Redis-Tracking; tpm/rpm in litellm_params
 - ✅ Passwort-Flow: keine committeten Defaults mehr; Compose erzwingt Passwörter (`:?`),
@@ -291,7 +305,7 @@ make render-config              # Template -> config.yaml (Redis je nach REDIS_H
 make render-config-no-redis     # explizit ohne Redis-Bloecke
 make check-config               # bootet LiteLLM gegen Redis-freien Render (Port 4010)
 make validate-manifests         # compose config -q + kubeconform (falls installiert)
-make test                       # 89 Unit-Tests inkl. Invarianten
+make test                       # 96 Unit-Tests inkl. Invarianten
 make lint / make format         # ruff
 make clean                      # Backups/Reports/Caches aufräumen
 

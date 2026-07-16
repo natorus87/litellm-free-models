@@ -185,6 +185,114 @@ class TestProviderToLitellmMapping(unittest.TestCase):
                 self.assertIn(name, fsm.PROVIDER_TO_LITELLM)
 
 
+class TestPaidVendorFilter(unittest.TestCase):
+    """Aggregatoren (OpenCode Zen, LLM7.io) mischen echte Open-Weight-Modelle
+    mit Zugriff auf kostenpflichtige Flaggschiff-APIs unter deren Marken.
+    Diese duerfen nie automatisch als 'free' uebernommen werden."""
+
+    def test_denies_known_paid_flagships_regardless_of_provider(self):
+        denied = [
+            "claude-opus-4-8", "claude-sonnet-5", "claude-fable-5",
+            "anthropic/claude-3-opus",
+            "gpt-5.4", "gpt-5.4-mini", "gpt-5", "gpt-5-nano", "gpt-5-codex",
+            "gpt-4", "gpt-4o", "openai/gpt-4-turbo",
+            "gemini-3.5-flash", "gemini-3-flash-preview", "google/gemini-2.0",
+            "grok-4.5", "grok-build-0.1", "x-ai/grok-2",
+        ]
+        # Diese Vendoren veroeffentlichen NIE offene Gewichte -> Deny ueberall,
+        # auch ohne provider-Angabe und auch auf einem Open-Weight-Host wie HF.
+        for m in denied:
+            with self.subTest(model=m):
+                self.assertTrue(fsm.is_paid_vendor_model(m))
+                self.assertTrue(fsm.is_paid_vendor_model(m, "huggingface"))
+                self.assertTrue(fsm.is_paid_vendor_model(m, "opencode-zen"))
+
+    def test_denies_ambiguous_vendors_only_on_aggregators(self):
+        # GLM/MiniMax veroeffentlichen TEILWEISE offene Gewichte -- nur bei
+        # den API-Aggregatoren (wo unklar ist, ob's der offene Checkpoint
+        # oder die kostenpflichtige Flaggschiff-API ist) wird gefiltert.
+        for m in ["glm-5", "glm-5.1", "glm-5.2", "minimax-m2.7", "minimax-m3", "MiniMax-Text-01"]:
+            with self.subTest(model=m):
+                self.assertTrue(fsm.is_paid_vendor_model(m, "opencode-zen"))
+                self.assertTrue(fsm.is_paid_vendor_model(m, "llm7io"))
+                # Auf HuggingFace koennen nur echte Checkpoints liegen ->
+                # nicht gefiltert.
+                self.assertFalse(fsm.is_paid_vendor_model(m, "huggingface"))
+                # Ohne provider-Angabe (z.B. Stale-Check) ebenfalls nicht --
+                # die Ambiguitaet betrifft nur die Aggregatoren.
+                self.assertFalse(fsm.is_paid_vendor_model(m))
+
+    def test_allows_established_open_weight_models(self):
+        allowed = [
+            "gpt-oss-120b", "gpt-oss-20b", "gpt-oss-safeguard-20b", "gpt-oss:20b",
+            "openai/gpt-oss-120b",
+            "gemma-4-26b-a4b-it", "gemma-4-31b-it", "google/gemma-2-9b-it",
+            "moonshotai/Kimi-K2.6", "kimi-k2.6", "kimi-k2.5",
+            "meta-llama/Llama-3.3-70B-Instruct", "mistral-large",
+            "deepseek-v4-flash", "deepseek-ai/DeepSeek-V4-Pro",
+            "Qwen/Qwen3-32B", "nvidia/Nemotron-3-Nano-30B-A3B",
+            "command-r-plus", "codestral-latest", "whisper-large-v3",
+        ]
+        for m in allowed:
+            with self.subTest(model=m):
+                self.assertFalse(fsm.is_paid_vendor_model(m, "huggingface"))
+                self.assertFalse(fsm.is_paid_vendor_model(m, "opencode-zen"))
+
+
+class TestHttpGetJsonUserAgent(unittest.TestCase):
+    """Regression: Cerebras/Groq/OpenCode Zen sitzen hinter Cloudflares
+    Bot-Schutz, der urllib's Default-User-Agent mit 403 ("error code: 1010",
+    ein WAF-Block, kein Auth-Fehler) blockiert. Ein browser-aehnlicher
+    User-Agent muss auf jedem Request gesetzt werden."""
+
+    def test_default_user_agent_is_sent(self):
+        import io
+        import unittest.mock as mock
+
+        captured = {}
+
+        # http_get_json nutzt `with urlopen(...) as resp`, also braucht das
+        # Fake ein __enter__/__exit__ (io.BytesIO allein reicht nicht).
+        class FakeResp(io.BytesIO):
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *a):
+                return False
+
+        def fake_urlopen(req, timeout=30):
+            captured["headers"] = dict(req.header_items())
+            return FakeResp(b'{"data": []}')
+
+        with mock.patch("urllib.request.urlopen", side_effect=fake_urlopen):
+            fsm.http_get_json("https://example.invalid/v1/models", {"Authorization": "Bearer x"})
+
+        self.assertIn("User-agent", captured["headers"])
+        self.assertEqual(captured["headers"]["User-agent"], fsm.DEFAULT_USER_AGENT)
+
+    def test_caller_header_not_overridden(self):
+        import io
+        import unittest.mock as mock
+
+        captured = {}
+
+        class FakeResp(io.BytesIO):
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *a):
+                return False
+
+        def fake_urlopen(req, timeout=30):
+            captured["headers"] = dict(req.header_items())
+            return FakeResp(b'{"data": []}')
+
+        with mock.patch("urllib.request.urlopen", side_effect=fake_urlopen):
+            fsm.http_get_json("https://example.invalid", {"User-Agent": "custom/1.0"})
+
+        self.assertEqual(captured["headers"]["User-agent"], "custom/1.0")
+
+
 class TestOpenRouterFreeFilter(unittest.TestCase):
     """OpenRouter listet den Gesamtkatalog — nur Free-Modelle duerfen durch,
     sonst kann --apply ein PAID-Modell in die Config schreiben."""
@@ -257,6 +365,201 @@ class TestGithubModelParsing(unittest.TestCase):
     def test_handles_dict_response(self):
         data = {"data": [{"id": "model-a"}]}
         self.assertEqual(fsm._parse_github_models(data), ["model-a"])
+
+
+class TestParseConfigBlockBoundaries(unittest.TestCase):
+    """Regression: parse_config() darf beim Block-Ende NIE ueber die
+    Leerzeile hinaus in den naechsten Kommentar-Header hineinlesen. Sonst
+    wird line_end zu gross berechnet und apply_to_config() fuegt neue
+    Deployments MITTEN in den falsch begrenzten Vorgaenger-Block ein
+    (live beobachtet: deepseek-r1-0528 (llm7io) wurde durch eine neue
+    gemma-4-31b-it-Insertion zerrissen, weil der HF-Nachbar-Block faelschlich
+    bis in den Kommentar-Header von 'qwen3-235b' hinein geparst wurde)."""
+
+    def _write(self, tmpdir, text):
+        from pathlib import Path
+        p = Path(tmpdir) / "config.yaml"
+        p.write_text(text)
+        return p
+
+    def test_block_end_stops_at_blank_line_before_comment_header(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as d:
+            text = (
+                "model_list:\n"
+                "\n"
+                "  - model_name: deepseek-r1-0528\n"
+                "    litellm_params:\n"
+                "      model: openai/deepseek-r1-0528\n"
+                "      api_key: unused\n"
+                "      tpm: 200000\n"
+                "      rpm: 40\n"
+                "    model_info:\n"
+                "      input_cost_per_token: 0\n"
+                "      output_cost_per_token: 0\n"
+                "      mode: chat\n"
+                "\n"
+                "  - model_name: deepseek-r1-0528\n"
+                "    litellm_params:\n"
+                "      model: huggingface/deepseek-ai/DeepSeek-R1-0528\n"
+                "      api_key: hf-test\n"
+                "      tpm: 200000\n"
+                "      rpm: 30\n"
+                "    model_info:\n"
+                "      input_cost_per_token: 0\n"
+                "      output_cost_per_token: 0\n"
+                "      mode: chat\n"
+                "\n"
+                "  # ===========================================================================\n"
+                "  # qwen3-235b  – 2 FREE PROVIDERS\n"
+                "  # ===========================================================================\n"
+                "  - model_name: qwen3-235b\n"
+                "    litellm_params:\n"
+                "      model: openai/qwen3-235b\n"
+                "      api_key: unused\n"
+                "\n"
+                "router_settings:\n"
+                "  routing_strategy: usage-based-routing-v2\n"
+            )
+            p = self._write(d, text)
+            lines, ml_start, ml_end, existing = fsm.parse_config(p)
+            entries = existing["deepseek-r1-0528"]
+            self.assertEqual(len(entries), 2)
+            hf_entry = next(e for e in entries if e["provider"] == "huggingface")
+            # line_end MUSS bei "mode: chat" enden (12 Zeilen nach dem
+            # Leerzeilen-Trenner), NICHT bei den Kommentar-Header-Zeilen von
+            # qwen3-235b.
+            self.assertEqual(lines[hf_entry["line_end"]].strip(), "mode: chat")
+            self.assertNotIn("qwen3-235b", lines[hf_entry["line_end"]])
+
+
+class TestApplyToConfigOrdering(unittest.TestCase):
+    """Regression: apply_to_config() muss new_blocks (komplett neue
+    model_names) VOR den Insertions in bestehende Bloecke einfuegen. ml_end
+    wird einmalig aus dem unveraenderten Text berechnet -- wuerden zuerst
+    die Insertions angewendet, waere der Index bei der new_blocks-Splice
+    stale und die neuen Bloecke landeten mitten im model_list statt am
+    Ende (live beobachtet: zerrissener deepseek-r1-0528-Block)."""
+
+    def _write_template(self, tmpdir):
+        from pathlib import Path
+        p = Path(tmpdir) / "tmpl.yaml"
+        p.write_text(
+            "model_list:\n"
+            "\n"
+            "  - model_name: existing-a\n"
+            "    litellm_params:\n"
+            "      model: openrouter/existing-a\n"
+            "      api_key: unused\n"
+            "      tpm: 1\n"
+            "      rpm: 1\n"
+            "    model_info:\n"
+            "      input_cost_per_token: 0\n"
+            "      output_cost_per_token: 0\n"
+            "      mode: chat\n"
+            "\n"
+            "  - model_name: existing-a\n"
+            "    litellm_params:\n"
+            "      model: groq/existing-a\n"
+            "      api_key: unused\n"
+            "      tpm: 1\n"
+            "      rpm: 1\n"
+            "    model_info:\n"
+            "      input_cost_per_token: 0\n"
+            "      output_cost_per_token: 0\n"
+            "      mode: chat\n"
+            "\n"
+            "  # ===========================================================================\n"
+            "  # existing-b  – 2 FREE PROVIDERS\n"
+            "  # ===========================================================================\n"
+            "  - model_name: existing-b\n"
+            "    litellm_params:\n"
+            "      model: mistral/existing-b\n"
+            "      api_key: unused\n"
+            "    model_info:\n"
+            "      input_cost_per_token: 0\n"
+            "      output_cost_per_token: 0\n"
+            "      mode: chat\n"
+            "\n"
+            "router_settings:\n"
+            "  routing_strategy: usage-based-routing-v2\n"
+            "  fallbacks:\n"
+            "    - {\"existing-a\": [\"existing-b\"]}\n"
+        )
+        return p
+
+    def test_new_and_existing_additions_do_not_corrupt_structure(self):
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as d:
+            p = self._write_template(d)
+            plan = [
+                # Neuer Provider fuer ein BESTEHENDES model_name (Insertion)
+                {"model_name": "existing-a", "provider": "cohere",
+                 "model_id": "existing-a", "ic": 0.0, "oc": 0.0, "action": "add"},
+                # Komplett NEUES model_name (new_blocks)
+                {"model_name": "brand-new", "provider": "huggingface",
+                 "model_id": "org/brand-new", "ic": 0.0, "oc": 0.0, "action": "add"},
+            ]
+            added, _costs, _fallbacks = fsm.apply_to_config(p, plan, {}, {}, pricing=None)
+            self.assertEqual(added, 2)
+
+            result_text = p.read_text()
+            # Kein Deployment-Block darf abgeschnitten sein: jedes
+            # 'litellm_params:' muss noch sein zugehoeriges 'model_info:'
+            # mit 'mode: chat' im selben Block haben, bevor der naechste
+            # '- model_name:'/'router_settings:' beginnt.
+            lines = result_text.splitlines(keepends=True)
+            ml_start, ml_end = fsm._find_model_list_bounds(lines)
+            existing = fsm._scan_existing_blocks(lines, ml_start, ml_end)
+
+            self.assertIn("existing-a", existing)
+            self.assertIn("existing-b", existing)
+            self.assertIn("brand-new", existing)
+            self.assertEqual(len(existing["existing-a"]), 3)  # openrouter+groq+cohere
+            self.assertEqual({e["provider"] for e in existing["existing-a"]},
+                              {"openrouter", "groq", "cohere"})
+
+            # Jeder gescannte Block muss vollstaendig sein: model_info.mode
+            # ist das LETZTE Feld, das build_deployment() schreibt. Fehlt
+            # es, wurde der Block von einer Einfuegung abgeschnitten (die
+            # blosse Anwesenheit von "model:" reicht NICHT als Check, da
+            # diese Zeile schon frueh im Block steht und auch in
+            # abgeschnittenen Bloecken vorhanden ist).
+            for mn, entries in existing.items():
+                for e in entries:
+                    block_text = "".join(lines[e["line_start"]:e["line_end"] + 1])
+                    self.assertIn("mode: chat", block_text,
+                                  f"{mn}/{e['provider']}: Block wirkt abgeschnitten "
+                                  f"(model_info.mode fehlt)")
+
+            # router_settings + die urspruengliche Fallback-Chain muessen
+            # unversehrt und NACH dem model_list stehen.
+            self.assertIn("router_settings:", result_text)
+            self.assertIn('"existing-a": ["existing-b"]', result_text)
+            router_idx = result_text.index("router_settings:")
+            brand_new_idx = result_text.index("brand-new")
+            self.assertLess(brand_new_idx, router_idx,
+                             "neuer Block muss VOR router_settings stehen")
+
+            # Der urspruengliche Kommentar-Header von existing-b (oeffnende
+            # Trennlinie + Titel + schliessende Trennlinie) darf nicht durch
+            # neue Bloecke auseinandergerissen werden -- er muss als
+            # zusammenhaengender 4-Zeilen-Block direkt vor dessen
+            # '- model_name:'-Zeile stehen. (Bei der fehlerhaften Einfuege-
+            # Reihenfolge blieb genau die OEFFNENDE Trennlinie zurueck und
+            # wurde vom Rest des Headers getrennt -- die Block-
+            # Vollstaendigkeits-Checks oben erkennen das nicht, da der
+            # Blockinhalt selbst intakt bleibt, nur der davorstehende
+            # Header zerrissen wird.)
+            self.assertIn(
+                "  # ===========================================================================\n"
+                "  # existing-b  – 2 FREE PROVIDERS\n"
+                "  # ===========================================================================\n"
+                "  - model_name: existing-b\n",
+                result_text,
+                "Kommentar-Header von existing-b wurde durch neue Bloecke zerrissen",
+            )
 
 
 class TestGenerateApplyPlan(unittest.TestCase):
