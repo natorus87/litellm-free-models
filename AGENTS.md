@@ -257,7 +257,7 @@ docker compose up -d
 - ✅ CI: ruff blockierend, `make test` propagiert Exit-Codes, Invarianten-Tests,
   `docker compose config -q`, kubeconform, Kustomize-Builds, Matrix-Drift-Check
 - ✅ Sync-Workflow → wöchentliche PR-Pipeline mit Gates (kein Auto-Merge, Fail ohne Secrets)
-- ✅ Image auf `main-v1.83.14-stable` gepinnt (Makefile `LITELLM_IMAGE`, Compose, K8s, Dockerfile)
+- ✅ Image auf `v1.92.0` gepinnt (Makefile `LITELLM_IMAGE`, Compose, K8s, Dockerfile)
 - ✅ securityContext überall, NetworkPolicies für Redis/Postgres
 - ✅ Postgres-Backup: K8s-CronJob (nightly, 7 Dumps) + `make backup-db`/`restore-db` für Compose
 - ✅ `make check-config` bootet LiteLLM real gegen einen Redis-freien Render (Port 4010)
@@ -286,7 +286,7 @@ docker compose up -d
 9. **Secret-Konvention**: committet werden nur `*.template`-Dateien; reale Secrets erzeugt `make k8s-secret` aus `.env` (litellm-secrets mit expliziter Key-Allowlist, litellm-redis-secret, litellm-postgres-secret). `k8s-apply` wendet NIE ein Secret-File an.
 10. **Passwörter ohne Defaults**: Compose nutzt `${VAR:?}`-Interpolation; `.env.example` liefert leere Pflichtfelder. In Multi-Instance liest Compose Passwörter NUR aus `multi-instance/.env` (per-Service `env_file` wird für Interpolation nie benutzt).
 11. **Redis ist reiner Cache**: `--save ""`, kein PVC/emptyDir-Persistenz — Cache wärmt sich selbst wieder auf; Memory-Limit 512Mi = 2× maxmemory (Fragmentierungs-Headroom).
-12. **Image-Pinning**: `ghcr.io/berriai/litellm:main-v1.83.14-stable` überall statt `main-latest`; zentrale Variable `LITELLM_IMAGE` im Makefile; Dependabot (docker) bumpt das Dockerfile, Compose/K8s dann manuell nachziehen.
+12. **Image-Pinning**: `ghcr.io/berriai/litellm:v1.92.0` überall statt `main-latest`; zentrale Variable `LITELLM_IMAGE` im Makefile; Dependabot (docker) bumpt das Dockerfile, Compose/K8s dann manuell nachziehen. Seit v1.9x taggt BerriAI stabile Releases als nacktes `vX.Y.Z` statt `main-vX.Y.Z-stable`.
 13. **usage-based-routing-v2 statt simple-shuffle**: simple-shuffle ignorierte die gepflegten rpm/tpm-Werte komplett (rpm:1-OpenRouter bekam gleich viel Traffic wie rpm:40-NVIDIA). Dafür mussten tpm/rpm nach `litellm_params` wandern.
 14. **Doku-Matrix wird generiert** (`--write-docs` zwischen HTML-Marker); CI failt bei Drift. Handgepflegte Deployment-Zahlen sind abgeschafft.
 15. **Sync-PR-Pipeline konservativ**: `--apply` fügt nur hinzu/aktualisiert Kosten; Modell-Entfernungen bleiben manuell (Katalog-Flapping). Ohne `SYNC_*`-Secrets failt der Run laut.

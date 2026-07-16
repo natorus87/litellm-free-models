@@ -12,7 +12,7 @@
 #   docker run -p 4000:4000 --env-file .env litellm-free-models
 # =============================================================================
 
-FROM ghcr.io/berriai/litellm:main-v1.83.14-stable AS base
+FROM ghcr.io/berriai/litellm:v1.92.0 AS base
 
 # Copy config
 COPY config.yaml /app/config.yaml

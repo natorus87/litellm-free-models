@@ -23,7 +23,7 @@ spec:
           type: RuntimeDefault
       containers:
         - name: litellm-slave
-          image: ghcr.io/berriai/litellm:main-v1.83.14-stable
+          image: ghcr.io/berriai/litellm:v1.92.0
           imagePullPolicy: IfNotPresent
           args:
             - "--config"
@@ -118,7 +118,7 @@ spec:
           type: RuntimeDefault
       containers:
         - name: litellm-slave
-          image: ghcr.io/berriai/litellm:main-v1.83.14-stable
+          image: ghcr.io/berriai/litellm:v1.92.0
           imagePullPolicy: IfNotPresent
           args:
             - "--config"

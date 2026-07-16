@@ -28,7 +28,7 @@ spec:
           # Gepinnte Version statt wanderndem main-latest (Reproduzierbarkeit;
           # main-latest + IfNotPresent liesse jeden Node auf anderem Stand
           # laufen). Update bewusst via Tag-Bump.
-          image: ghcr.io/berriai/litellm:main-v1.83.14-stable
+          image: ghcr.io/berriai/litellm:v1.92.0
           imagePullPolicy: IfNotPresent
           args:
             - "--config"

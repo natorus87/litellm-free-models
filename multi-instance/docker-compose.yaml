@@ -83,7 +83,7 @@ services:
 
   # ─── Master Instance ────────────────────────────────────────────────────────
   master:
-    image: ghcr.io/berriai/litellm:main-v1.83.14-stable
+    image: ghcr.io/berriai/litellm:v1.92.0
     container_name: litellm-master
     ports:
       - "4000:4000"  # Clients call the master on port 4000
@@ -115,7 +115,7 @@ services:
 
   # ─── Slave 1 Instance ──────────────────────────────────────────────────────
   slave1:
-    image: ghcr.io/berriai/litellm:main-v1.83.14-stable
+    image: ghcr.io/berriai/litellm:v1.92.0
     container_name: litellm-slave1
     ports:
       - "4001:4000"  # Slave 1 on host port 4001
@@ -148,7 +148,7 @@ services:
 
   # ─── Slave 2 Instance ──────────────────────────────────────────────────────
   slave2:
-    image: ghcr.io/berriai/litellm:main-v1.83.14-stable
+    image: ghcr.io/berriai/litellm:v1.92.0
     container_name: litellm-slave2
     ports:
       - "4002:4000"  # Slave 2 on host port 4002

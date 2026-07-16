@@ -10,7 +10,7 @@
 # Gepinnte LiteLLM-Version (statt wanderndem main-latest Tag).
 # Muss mit docker-compose.yaml, Dockerfile und den K8s-Deployments
 # uebereinstimmen; Updates via Renovate/Dependabot oder manuell.
-LITELLM_IMAGE ?= ghcr.io/berriai/litellm:main-v1.83.14-stable
+LITELLM_IMAGE ?= ghcr.io/berriai/litellm:v1.92.0
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | \
