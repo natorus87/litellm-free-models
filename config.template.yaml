@@ -1049,9 +1049,9 @@ model_list:
 
 
   # ===========================================================================
-  # k2-5  –  2 FREE PROVIDERS
+  # kimi-k2.5  –  2 FREE PROVIDERS
   # ===========================================================================
-  - model_name: k2-5
+  - model_name: kimi-k2.5
     litellm_params:
       model: openai/kimi-k2.5
       api_key: os.environ/OPENCODE_ZEN_API_KEY
@@ -1063,7 +1063,7 @@ model_list:
       output_cost_per_token: 0
       mode: chat
 
-  - model_name: k2-5
+  - model_name: kimi-k2.5
     litellm_params:
       model: huggingface/moonshotai/Kimi-K2.5
       api_key: os.environ/HF_TOKEN
@@ -1076,9 +1076,9 @@ model_list:
 
 
   # ===========================================================================
-  # k2-7-code  –  2 FREE PROVIDERS
+  # kimi-k2.7-code  –  2 FREE PROVIDERS
   # ===========================================================================
-  - model_name: k2-7-code
+  - model_name: kimi-k2.7-code
     litellm_params:
       model: openai/kimi-k2.7-code
       api_key: os.environ/OPENCODE_ZEN_API_KEY
@@ -1090,7 +1090,7 @@ model_list:
       output_cost_per_token: 0
       mode: chat
 
-  - model_name: k2-7-code
+  - model_name: kimi-k2.7-code
     litellm_params:
       model: huggingface/moonshotai/Kimi-K2.7-Code
       api_key: os.environ/HF_TOKEN
@@ -1193,9 +1193,9 @@ model_list:
 
 
   # ===========================================================================
-  # qwen3-5-397b-a17b  –  2 FREE PROVIDERS
+  # qwen3.5-397b-a17b  –  2 FREE PROVIDERS
   # ===========================================================================
-  - model_name: qwen3-5-397b-a17b
+  - model_name: qwen3.5-397b-a17b
     litellm_params:
       model: huggingface/Qwen/Qwen3.5-397B-A17B
       api_key: os.environ/HF_TOKEN
@@ -1206,7 +1206,7 @@ model_list:
       output_cost_per_token: 0
       mode: chat
 
-  - model_name: qwen3-5-397b-a17b
+  - model_name: qwen3.5-397b-a17b
     litellm_params:
       model: openai/Qwen3.5-397B-A17B
       api_key: os.environ/OVHCLOUD_API_KEY
@@ -1220,9 +1220,9 @@ model_list:
 
 
   # ===========================================================================
-  # qwen3-5-9b  –  2 FREE PROVIDERS
+  # qwen3.5-9b  –  2 FREE PROVIDERS
   # ===========================================================================
-  - model_name: qwen3-5-9b
+  - model_name: qwen3.5-9b
     litellm_params:
       model: huggingface/Qwen/Qwen3.5-9B
       api_key: os.environ/HF_TOKEN
@@ -1233,7 +1233,7 @@ model_list:
       output_cost_per_token: 0
       mode: chat
 
-  - model_name: qwen3-5-9b
+  - model_name: qwen3.5-9b
     litellm_params:
       model: openai/Qwen3.5-9B
       api_key: os.environ/OVHCLOUD_API_KEY
@@ -1247,9 +1247,9 @@ model_list:
 
 
   # ===========================================================================
-  # qwen3-6-27b  –  3 FREE PROVIDERS
+  # qwen3.6-27b  –  3 FREE PROVIDERS
   # ===========================================================================
-  - model_name: qwen3-6-27b
+  - model_name: qwen3.6-27b
     litellm_params:
       model: groq/qwen/qwen3.6-27b
       api_key: os.environ/GROQ_API_KEY
@@ -1260,7 +1260,7 @@ model_list:
       output_cost_per_token: 0
       mode: chat
 
-  - model_name: qwen3-6-27b
+  - model_name: qwen3.6-27b
     litellm_params:
       model: huggingface/Qwen/Qwen3.6-27B
       api_key: os.environ/HF_TOKEN
@@ -1271,7 +1271,7 @@ model_list:
       output_cost_per_token: 0
       mode: chat
 
-  - model_name: qwen3-6-27b
+  - model_name: qwen3.6-27b
     litellm_params:
       model: openai/Qwen3.6-27B
       api_key: os.environ/OVHCLOUD_API_KEY
@@ -1338,9 +1338,9 @@ model_list:
 
 
   # ===========================================================================
-  # v4  –  2 FREE PROVIDERS
+  # deepseek-v4-pro  –  2 FREE PROVIDERS
   # ===========================================================================
-  - model_name: v4
+  - model_name: deepseek-v4-pro
     litellm_params:
       model: openai/deepseek-v4-pro
       api_key: os.environ/OPENCODE_ZEN_API_KEY
@@ -1352,7 +1352,7 @@ model_list:
       output_cost_per_token: 0
       mode: chat
 
-  - model_name: v4
+  - model_name: deepseek-v4-pro
     litellm_params:
       model: huggingface/deepseek-ai/DeepSeek-V4-Pro
       api_key: os.environ/HF_TOKEN
@@ -1456,17 +1456,17 @@ router_settings:
     - {"*":                         ["llama-3.1-8b", "gpt-oss-20b", "gemma-4-26b-a4b-it", "deepseek-v4-flash", "openrouter-free"]}
 
     - {"gpt-oss-safeguard-20b": ["gpt-oss-120b", "llama-3.3-70b-instruct", "mistral-large", "gpt-oss-20b"]}
-    - {"k2-5": ["gpt-oss-120b", "llama-3.3-70b-instruct", "mistral-large", "gpt-oss-20b"]}
-    - {"k2-7-code": ["gpt-oss-120b", "llama-3.3-70b-instruct", "mistral-large", "gpt-oss-20b"]}
+    - {"kimi-k2.5": ["gpt-oss-120b", "llama-3.3-70b-instruct", "mistral-large", "gpt-oss-20b"]}
+    - {"kimi-k2.7-code": ["gpt-oss-120b", "llama-3.3-70b-instruct", "mistral-large", "gpt-oss-20b"]}
     - {"lyria-3-clip": ["gpt-oss-120b", "llama-3.3-70b-instruct", "mistral-large", "gpt-oss-20b"]}
     - {"lyria-3-pro": ["gpt-oss-120b", "llama-3.3-70b-instruct", "mistral-large", "gpt-oss-20b"]}
     - {"qwen3-32b": ["gpt-oss-120b", "llama-3.3-70b-instruct", "mistral-large", "gpt-oss-20b"]}
-    - {"qwen3-5-397b-a17b": ["gpt-oss-120b", "llama-3.3-70b-instruct", "mistral-large", "gpt-oss-20b"]}
-    - {"qwen3-5-9b": ["gpt-oss-120b", "llama-3.3-70b-instruct", "mistral-large", "gpt-oss-20b"]}
-    - {"qwen3-6-27b": ["gpt-oss-120b", "llama-3.3-70b-instruct", "mistral-large", "gpt-oss-20b"]}
+    - {"qwen3.5-397b-a17b": ["gpt-oss-120b", "llama-3.3-70b-instruct", "mistral-large", "gpt-oss-20b"]}
+    - {"qwen3.5-9b": ["gpt-oss-120b", "llama-3.3-70b-instruct", "mistral-large", "gpt-oss-20b"]}
+    - {"qwen3.6-27b": ["gpt-oss-120b", "llama-3.3-70b-instruct", "mistral-large", "gpt-oss-20b"]}
     - {"qwen3-coder-30b-a3b": ["gpt-oss-120b", "llama-3.3-70b-instruct", "mistral-large", "gpt-oss-20b"]}
     - {"qwen3-next-80b-a3b": ["gpt-oss-120b", "llama-3.3-70b-instruct", "mistral-large", "gpt-oss-20b"]}
-    - {"v4": ["gpt-oss-120b", "llama-3.3-70b-instruct", "mistral-large", "gpt-oss-20b"]}
+    - {"deepseek-v4-pro": ["gpt-oss-120b", "llama-3.3-70b-instruct", "mistral-large", "gpt-oss-20b"]}
     - {"whisper-large-v3": ["gpt-oss-120b", "llama-3.3-70b-instruct", "mistral-large", "gpt-oss-20b"]}
     - {"whisper-large-v3-turbo": ["gpt-oss-120b", "llama-3.3-70b-instruct", "mistral-large", "gpt-oss-20b"]}
   context_window_fallbacks:

@@ -111,24 +111,24 @@ Stand (aus `config.template.yaml` generiert): **36 model_names, 109 base-Deploym
 | `nemotron-3-nano-30b` | 3 | OpenRouter, NVIDIA, HuggingFace |
 | `nemotron-3-ultra` | 3 | OpenRouter, OpenCode Zen, NVIDIA |
 | `qwen3-32b` | 3 | Groq, HuggingFace, OVHcloud |
-| `qwen3-6-27b` | 3 | Groq, HuggingFace, OVHcloud |
+| `qwen3.6-27b` | 3 | Groq, HuggingFace, OVHcloud |
 | `codestral-latest` | 2 | LLM7.io, Mistral |
 | `command-r-plus` | 2 | Cohere, GitHub Models |
 | `deepseek-r1-0528` | 2 | LLM7.io, HuggingFace |
+| `deepseek-v4-pro` | 2 | OpenCode Zen, HuggingFace |
 | `gpt-oss-safeguard-20b` | 2 | Groq, HuggingFace |
-| `k2-5` | 2 | OpenCode Zen, HuggingFace |
-| `k2-7-code` | 2 | OpenCode Zen, HuggingFace |
+| `kimi-k2.5` | 2 | OpenCode Zen, HuggingFace |
+| `kimi-k2.7-code` | 2 | OpenCode Zen, HuggingFace |
 | `lyria-3-clip` | 2 | OpenRouter, Google AI Studio |
 | `lyria-3-pro` | 2 | OpenRouter, Google AI Studio |
 | `mistral-large` | 2 | Mistral, GitHub Models |
 | `mistral-small-3.2` | 2 | LLM7.io, Mistral |
 | `north-mini-code` | 2 | OpenCode Zen, OpenRouter |
 | `qwen3-235b` | 2 | LLM7.io, HuggingFace |
-| `qwen3-5-397b-a17b` | 2 | HuggingFace, OVHcloud |
-| `qwen3-5-9b` | 2 | HuggingFace, OVHcloud |
 | `qwen3-coder-30b-a3b` | 2 | HuggingFace, OVHcloud |
 | `qwen3-next-80b-a3b` | 2 | OpenRouter, HuggingFace |
-| `v4` | 2 | OpenCode Zen, HuggingFace |
+| `qwen3.5-397b-a17b` | 2 | HuggingFace, OVHcloud |
+| `qwen3.5-9b` | 2 | HuggingFace, OVHcloud |
 | `whisper-large-v3` | 2 | Groq, OVHcloud |
 | `whisper-large-v3-turbo` | 2 | Groq, OVHcloud |
 | `big-pickle` | 1 | OpenCode Zen |

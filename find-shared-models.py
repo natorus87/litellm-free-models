@@ -197,6 +197,34 @@ def short_key(name: str) -> str:
     return name.split("/")[-1]
 
 
+def pretty_model_name(model_id: str) -> str:
+    """
+    Leitet einen lesbaren model_name aus einer rohen Provider-Modell-ID ab
+    -- OHNE die aggressive STOPWORDS-Bereinigung von normalize().
+
+    normalize() ist fuer die GRUPPIERUNG gleicher Modelle ueber Provider
+    hinweg gedacht und entfernt Vendor-Woerter (u.a. "deepseek", "kimi",
+    "moonshotai") bewusst, weil viele Provider-IDs den Vendor doppelt
+    fuehren (z.B. "deepseek/deepseek-v4-pro" -- ohne Stopword-Filter
+    gruppiert das nicht mit "DeepSeek-V4-Pro" von einem anderen Provider).
+    Fuer den tatsaechlichen model_name ist dieselbe Bereinigung aber zu
+    aggressiv: aus "deepseek-v4-pro" wurde dadurch der unbrauchbare Name
+    "v4" (nur weil "deepseek" ein Stopword ist), aus "moonshotai/Kimi-K2.5"
+    wurde "k2-5" statt "kimi-k2.5".
+
+    Nimmt daher nur das letzte Pfadsegment (Vendor-Praefix wie "org/" faellt
+    weg, der eigentliche Modellname bleibt erhalten), lowercased, ohne
+    ':tag'-Suffix (z.B. ':free'). Punkte bleiben erhalten (Repo-Konvention:
+    "kimi-k2.6", "mistral-small-3.2").
+    """
+    tail = model_id.rsplit("/", 1)[-1]
+    tail = re.sub(r":[a-z\-]+$", "", tail, flags=re.IGNORECASE)
+    tail = tail.lower()
+    tail = re.sub(r"[^a-z0-9.\-]+", "-", tail)
+    tail = re.sub(r"-+", "-", tail).strip("-.")
+    return tail or normalize(model_id)
+
+
 # ---------------------------------------------------------------------------
 # Provider-Definitionen
 # ---------------------------------------------------------------------------
@@ -902,7 +930,17 @@ def generate_apply_plan(
     }
 
     for group_norm, providers in all_groups.items():
-        model_name = norm_to_existing.get(group_norm, group_norm)
+        if group_norm in norm_to_existing:
+            model_name = norm_to_existing[group_norm]
+        else:
+            # Neue Gruppe: sprechenden Namen aus einer Original-ID ableiten
+            # statt den aggressiv STOPWORDS-bereinigten Grouping-Key direkt
+            # als model_name zu verwenden (der waere z.B. "v4" statt
+            # "deepseek-v4-pro", oder "k2-5" statt "kimi-k2.5" -- siehe
+            # pretty_model_name()-Docstring). Deterministisch: alphabetisch
+            # erste Original-ID ueber alle Provider der Gruppe.
+            sample_orig = min(o for origs in providers.values() for o in origs)
+            model_name = pretty_model_name(sample_orig)
         existing_keys = set()
         if model_name in existing:
             for e in existing[model_name]:

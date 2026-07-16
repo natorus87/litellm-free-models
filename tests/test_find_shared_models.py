@@ -40,6 +40,40 @@ class TestShortKey(unittest.TestCase):
                          "gpt-oss-120b")
 
 
+class TestPrettyModelName(unittest.TestCase):
+    """Regression: normalize()'s STOPWORDS-Filter ist fuer die GRUPPIERUNG
+    gedacht und zu aggressiv fuer den finalen model_name -- "deepseek-v4-pro"
+    wurde dadurch zu "v4", "moonshotai/Kimi-K2.5" zu "k2-5". Live beobachtet
+    beim Sync vom 2026-07-16 (Modelle 'v4', 'k2-5', 'k2-7-code' im Template)."""
+
+    def test_strips_vendor_path_prefix_not_vendor_word(self):
+        # Vendor-Praefix (vor dem letzten "/") faellt weg, aber "deepseek"
+        # im eigentlichen Modellnamen bleibt (kein Stopword-Filter mehr).
+        self.assertEqual(fsm.pretty_model_name("deepseek-ai/DeepSeek-V4-Pro"),
+                          "deepseek-v4-pro")
+        self.assertEqual(fsm.pretty_model_name("deepseek-v4-pro"),
+                          "deepseek-v4-pro")
+
+    def test_keeps_dots_matching_repo_convention(self):
+        # Repo-Konvention: Minor-Versionen behalten den Punkt (kimi-k2.6,
+        # mistral-small-3.2), werden nicht zu Bindestrichen.
+        self.assertEqual(fsm.pretty_model_name("moonshotai/Kimi-K2.5"),
+                          "kimi-k2.5")
+        self.assertEqual(fsm.pretty_model_name("moonshotai/Kimi-K2.7-Code"),
+                          "kimi-k2.7-code")
+
+    def test_strips_free_tag_suffix(self):
+        self.assertEqual(fsm.pretty_model_name("openai/gpt-oss-120b:free"),
+                          "gpt-oss-120b")
+
+    def test_lowercased(self):
+        self.assertEqual(fsm.pretty_model_name("Qwen/Qwen3-32B"), "qwen3-32b")
+
+    def test_no_path_prefix(self):
+        self.assertEqual(fsm.pretty_model_name("whisper-large-v3"),
+                          "whisper-large-v3")
+
+
 class TestZenGroups(unittest.TestCase):
     """Tests fuer den Include-Bug (big-pickle vs big-pickle-extra)."""
 
@@ -608,6 +642,36 @@ class TestGenerateApplyPlan(unittest.TestCase):
         }}
         plan = fsm.generate_apply_plan(groups, {}, self._existing(), None)
         self.assertTrue(all(p["action"] == "skip" for p in plan))
+
+    def test_new_group_gets_pretty_name_not_raw_grouping_key(self):
+        # Regression: eine komplett NEUE Gruppe (kein existing-Match) bekam
+        # frueher den aggressiv STOPWORDS-bereinigten Grouping-Key als
+        # model_name ("v4" statt "deepseek-v4-pro"). generate_apply_plan
+        # muss stattdessen pretty_model_name() auf einer Original-ID
+        # anwenden.
+        group_norm = fsm.normalize("deepseek-v4-pro")
+        self.assertEqual(group_norm, "v4")  # zur Doku: das war der Bug
+        groups = {group_norm: {
+            "opencode-zen": ["deepseek-v4-pro"],
+            "huggingface": ["deepseek-ai/DeepSeek-V4-Pro"],
+        }}
+        plan = fsm.generate_apply_plan(groups, {}, {}, None)
+        adds = [p for p in plan if p["action"] == "add"]
+        self.assertEqual(len(adds), 2)
+        for p in adds:
+            self.assertEqual(p["model_name"], "deepseek-v4-pro")
+            self.assertNotEqual(p["model_name"], "v4")
+
+    def test_new_kimi_group_keeps_dotted_version(self):
+        group_norm = fsm.normalize("moonshotai/Kimi-K2.5")
+        groups = {group_norm: {
+            "opencode-zen": ["kimi-k2.5"],
+            "huggingface": ["moonshotai/Kimi-K2.5"],
+        }}
+        plan = fsm.generate_apply_plan(groups, {}, {}, None)
+        adds = [p for p in plan if p["action"] == "add"]
+        self.assertEqual(len(adds), 2)
+        self.assertTrue(all(p["model_name"] == "kimi-k2.5" for p in adds))
 
 
 class TestNativeModelId(unittest.TestCase):
