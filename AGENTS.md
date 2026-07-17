@@ -178,6 +178,8 @@ Maßgeblich ist `config.template.yaml` (`router_settings.fallbacks` / `context_w
 /home/sb/github/litellm-free-models/
 ├── onboard.py                   # Interaktives Setup (wiederholbar): .env, Key-Eingabe mit
 │                                #   Signup-URLs, Live-Key-Check, Render, Compose-Start
+├── opencode-config.py           # Provider-Eintrag in ~/.config/opencode/opencode.json
+│                                #   anlegen/updaten (Live-Modelle, schema-konforme options.*)
 ├── config.template.yaml         # Single Source of Truth mit {{ENV_VAR}} + # BEGIN/END REDIS-Markern
 ├── config.yaml                  # Generiert (gitignored, enthält echte Keys)
 ├── render-config.py             # Renderer: Substitution, Provider-Filter, Redis-Bloecke
@@ -206,7 +208,7 @@ Maßgeblich ist `config.template.yaml` (`router_settings.fallbacks` / `context_w
 │       ├── service.yaml
 │       └── secret.yaml.template
 │
-├── tests/                       # 96 Unit-Tests (unittest, stdlib-only)
+├── tests/                       # 109 Unit-Tests (unittest, stdlib-only)
 │   └── test_config_invariants.py  # Fallback-Ziele, ≥2-Provider-Regel, tpm/rpm-Lage, Redis-Marker
 │
 ├── .github/workflows/
@@ -290,6 +292,7 @@ docker compose up -d
 13. **usage-based-routing-v2 statt simple-shuffle**: simple-shuffle ignorierte die gepflegten rpm/tpm-Werte komplett (rpm:1-OpenRouter bekam gleich viel Traffic wie rpm:40-NVIDIA). Dafür mussten tpm/rpm nach `litellm_params` wandern.
 14. **Doku-Matrix wird generiert** (`--write-docs` zwischen HTML-Marker); CI failt bei Drift. Handgepflegte Deployment-Zahlen sind abgeschafft.
 15. **Sync-PR-Pipeline konservativ**: `--apply` fügt nur hinzu/aktualisiert Kosten; Modell-Entfernungen bleiben manuell (Katalog-Flapping). Ohne `SYNC_*`-Secrets failt der Run laut.
+16. **`opencode-config.py` schreibt schema-konform**: `apiKey`/`baseURL`/`timeout`/`chunkTimeout` liegen laut offiziellem Schema (`https://opencode.ai/config.json` → `$defs.ProviderConfig`, `additionalProperties: false`) in `options`, nicht auf oberster Ebene — ein `apiKey` außerhalb von `options` ist schema-ungültig. Beim Update eines bestehenden Provider-Eintrags wird dessen `options.baseURL` beibehalten, sofern `--host`/`--port`/`--base-url` nicht explizit gesetzt sind (verhindert, dass ein Re-Run eine LAN-erreichbare Adresse stillschweigend durch den lokalen Default ersetzt).
 
 ---
 
@@ -305,7 +308,9 @@ make render-config              # Template -> config.yaml (Redis je nach REDIS_H
 make render-config-no-redis     # explizit ohne Redis-Bloecke
 make check-config               # bootet LiteLLM gegen Redis-freien Render (Port 4010)
 make validate-manifests         # compose config -q + kubeconform (falls installiert)
-make test                       # 96 Unit-Tests inkl. Invarianten
+make test                       # Unit-Tests inkl. Invarianten
+make opencode-config            # Provider-Eintrag in ~/.config/opencode/opencode.json
+                                # anlegen/updaten (Live-Modelle, options.timeout/chunkTimeout)
 make lint / make format         # ruff
 make clean                      # Backups/Reports/Caches aufräumen
 

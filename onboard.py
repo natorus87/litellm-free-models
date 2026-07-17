@@ -434,9 +434,10 @@ def main() -> int:
   make docker-compose-up / -down            Stack starten / stoppen
   make render-config                        nach .env-Aenderungen neu rendern
   make check-config                         Config durch echten LiteLLM-Boot validieren
-  make test                                 89 Unit-Tests
+  make test                                 Unit-Tests
   python3 find-shared-models.py             Provider-Overlap + Stale-Report
-  make backup-db                            Postgres-Dump nach ./backups/""")
+  make backup-db                            Postgres-Dump nach ./backups/
+  make opencode-config                      Provider-Eintrag fuer OpenCode anlegen/updaten""")
     return 0
 
 

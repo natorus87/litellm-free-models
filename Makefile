@@ -2,10 +2,11 @@
 # LiteLLM Free-Models Proxy – Makefile
 # =============================================================================
 
-.PHONY: help onboard docker-build docker-run docker-stop k8s-apply k8s-delete \
-        k8s-secret k8s-logs k8s-pods check-config render-config \
-        render-config-no-redis test test-quiet clean validate-manifests \
-        backup-db restore-db lint format lint-fix pre-commit-run install-dev
+.PHONY: help onboard opencode-config docker-build docker-run docker-stop \
+        k8s-apply k8s-delete k8s-secret k8s-logs k8s-pods check-config \
+        render-config render-config-no-redis test test-quiet clean \
+        validate-manifests backup-db restore-db lint format lint-fix \
+        pre-commit-run install-dev
 
 # Gepinnte LiteLLM-Version (statt wanderndem main-latest Tag).
 # Muss mit docker-compose.yaml, Dockerfile und den K8s-Deployments
@@ -265,6 +266,11 @@ restore-db: ## Restore the newest dump from ./backups/ into the Compose Postgres
 	if [ -z "$$latest" ]; then echo "Kein Dump in ./backups/ gefunden"; exit 1; fi; \
 	echo "Restore aus $$latest ..."; \
 	docker exec -i litellm-postgres pg_restore -U litellm -d litellm --clean < "$$latest"
+
+# ─── Client-Integration ─────────────────────────────────────────────────────
+
+opencode-config: ## Provider-Eintrag in ~/.config/opencode/opencode.json anlegen/aktualisieren
+	@python3 opencode-config.py
 
 # ─── Housekeeping ───────────────────────────────────────────────────────────
 

@@ -40,7 +40,7 @@ A [LiteLLM](https://github.com/BerriAI/litellm) proxy that aggregates **exclusiv
 - **Live pricing report** — `find-shared-models.py` shows hypothetical savings vs. paid-tier prices (LiteLLM reference DB).
 - **Multi-instance setup** — Master + 2 Slaves in `multi-instance/` triple the effective rate limits (for separate hosts/IPs, see [Multi-Instance](#-multi-instance)).
 - **Template pipeline** — `config.template.yaml` is the single source of truth; `render-config.py` renders `config.yaml` from it with `{{ENV_VAR}}` substitution, provider filtering, and fallback-target validation.
-- **96 unit tests** — including structural invariant tests (fallback targets must exist, ≥ 2-provider rule).
+- **109 unit tests** — including structural invariant tests (fallback targets must exist, ≥ 2-provider rule).
 
 ---
 
@@ -336,7 +336,7 @@ Recommendations for operating the proxy (nothing is force-enabled by default):
 ## 🧪 Tests
 
 ```bash
-make test                # 96 unit tests, ~1s
+make test                # 109 unit tests, ~1s
 ```
 
 The suite covers five modules:
@@ -369,7 +369,8 @@ The tests use only the Python standard library (`unittest`).
 | `make docker-compose-up` / `make docker-compose-down`    | Control docker-compose                                 |
 | `make docker-build` / `make docker-run`                  | Build / run the custom image (standalone, without Redis) |
 | `make backup-db` / `make restore-db`                     | Dump / restore the Compose Postgres DB (`./backups/`)  |
-| `make test`                                              | Run 96 unit tests                                      |
+| `make opencode-config`                                   | Create/update the `litellm` provider in `~/.config/opencode/opencode.json` from live models |
+| `make test`                                              | Run 109 unit tests                                      |
 | `make lint` / `make format`                              | Run ruff linter / formatter                            |
 | `make clean`                                             | Remove generated/temporary files (backups, reports)    |
 | `make install-dev`                                       | Install dev dependencies and pre-commit hooks          |
