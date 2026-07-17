@@ -1,24 +1,25 @@
 #!/usr/bin/env python3
 """
-Zentrale Provider-Definitionen fuer render-config.py und find-shared-models.py.
+Central provider definitions for render-config.py and find-shared-models.py.
 
-Statt 5 paralleler Datenstrukturen (PROVIDER_PARAMS, PREFIX_TO_KEY,
-OPENAI_COMPAT_KEYS, STATIC_API_BASE, required_env) wird hier alles pro
-Provider zusammengefasst.
+Instead of 5 parallel data structures (PROVIDER_PARAMS, PREFIX_TO_KEY,
+OPENAI_COMPAT_KEYS, STATIC_API_BASE, required_env), everything is grouped
+here per provider.
 
-Schema pro Provider:
-  prefix:          litellm_params.model Praefix (z.B. 'openrouter', 'openai')
-  env_var:         API-Key Env-Variable in .env (oder None fuer anonymen Tier)
-  required:        True wenn Deployment ohne Key entfernt wird
-  api_base_env:    Env-Variable fuer api_base (oder None, dann static)
-  api_base_static: Statischer api_base (z.B. NVIDIA), None wenn via env
-  rpm:             Default-Rate-Limit
-  tpm:             Default-Token-Limit
-  needs_api_base:  True wenn api_base gesetzt werden muss (OpenAI-kompatibel)
-  litellm_key:     Key in der LiteLLM-Preisdatenbank (z.B. 'nvidia_nim')
-  vendor_in_path:  True wenn 'openai/<vendor>/<model>' -- der zweite Pfadteil
-                   identifiziert den Provider. False wenn 'openai/<model>'
-                   und der Provider via api_base-Diskrimination erkannt wird.
+Schema per provider:
+  prefix:          litellm_params.model prefix (e.g. 'openrouter', 'openai')
+  env_var:         API key env variable in .env (or None for an anonymous tier)
+  required:        True if the deployment is removed without a key
+  api_base_env:    Env variable for api_base (or None, then static)
+  api_base_static: Static api_base (e.g. NVIDIA), None if set via env
+  rpm:             Default rate limit
+  tpm:             Default token limit
+  needs_api_base:  True if api_base must be set (OpenAI-compatible)
+  litellm_key:     Key in the LiteLLM pricing database (e.g. 'nvidia_nim')
+  vendor_in_path:  True if 'openai/<vendor>/<model>' -- the second path
+                   segment identifies the provider. False if
+                   'openai/<model>' and the provider is discriminated via
+                   api_base.
 """
 
 from __future__ import annotations
@@ -119,17 +120,17 @@ PROVIDERS: dict[str, ProviderConfig] = {
 
 
 def get(name: str) -> ProviderConfig:
-    """Lookup mit klarer Fehlermeldung."""
+    """Lookup with a clear error message."""
     if name not in PROVIDERS:
-        raise KeyError(f"Unbekannter Provider: {name!r}")
+        raise KeyError(f"Unknown provider: {name!r}")
     return PROVIDERS[name]
 
 
 def find_by_litellm_prefix_and_vendor(prefix: str, vendor: str | None) -> ProviderConfig | None:
     """
-    Mappt (prefix, vendor) -> ProviderConfig. None wenn nicht gefunden.
-    Beispiel: ('openai', 'openai') -> nvidia (vendor_in_path)
-              ('openai', None)    -> None (mehrdeutig -- Github vs OVHcloud)
+    Maps (prefix, vendor) -> ProviderConfig. None if not found.
+    Example: ('openai', 'openai') -> nvidia (vendor_in_path)
+             ('openai', None)    -> None (ambiguous -- GitHub vs. OVHcloud)
     """
     for p in PROVIDERS.values():
         if p.prefix != prefix:

@@ -1,4 +1,4 @@
-"""Tests fuer find-shared-models.py."""
+"""Tests for find-shared-models.py."""
 import unittest
 
 from tests._loader import load_script
@@ -14,18 +14,19 @@ class TestNormalize(unittest.TestCase):
     def test_strip_size_qualifier(self):
         self.assertEqual(fsm.normalize("model-fast"), "model")
         self.assertEqual(fsm.normalize("model.pro"), "model")
-        # 'b' (Param-Count wie 7b, 70b) bleibt erhalten
+        # 'b' (param count like 7b, 70b) is preserved
         self.assertEqual(fsm.normalize("gpt-oss-70b"), "gpt-oss-70b")
-        # 'k' am Ende (Context-Window wie 128k) wird gestrippt, wenn direkt
-        # am Stringende: 'model-128k' endet auf '-128k', nicht '-k', bleibt
+        # trailing 'k' (context window like 128k) is stripped only when
+        # directly at the end of the string: 'model-128k' ends in '-128k',
+        # not '-k', so it stays
         self.assertEqual(fsm.normalize("model-128k"), "model-128k")
-        # Aber: 'model-128-k' endet auf '-k' und wird gestrippt
+        # But: 'model-128-k' ends in '-k' and gets stripped
         self.assertEqual(fsm.normalize("model-128-k"), "model-128")
 
     def test_strip_stopwords(self):
-        # 'meta', 'llama', 'instruct' etc. werden rausgefiltert
+        # 'meta', 'llama', 'instruct' etc. are filtered out
         result = fsm.normalize("Meta-Llama-3.3-70B-Instruct")
-        # 'meta', 'llama' und 'instruct' sind stopwords; '3-3' und '70b' bleiben
+        # 'meta', 'llama' and 'instruct' are stopwords; '3-3' and '70b' stay
         self.assertNotIn("meta", result)
         self.assertNotIn("llama", result)
 
@@ -41,22 +42,23 @@ class TestShortKey(unittest.TestCase):
 
 
 class TestPrettyModelName(unittest.TestCase):
-    """Regression: normalize()'s STOPWORDS-Filter ist fuer die GRUPPIERUNG
-    gedacht und zu aggressiv fuer den finalen model_name -- "deepseek-v4-pro"
-    wurde dadurch zu "v4", "moonshotai/Kimi-K2.5" zu "k2-5". Live beobachtet
-    beim Sync vom 2026-07-16 (Modelle 'v4', 'k2-5', 'k2-7-code' im Template)."""
+    """Regression: normalize()'s STOPWORDS filter is meant for GROUPING
+    and is too aggressive for the final model_name -- "deepseek-v4-pro"
+    was turned into "v4", "moonshotai/Kimi-K2.5" into "k2-5". Observed
+    live during the 2026-07-16 sync (models 'v4', 'k2-5', 'k2-7-code'
+    ended up in the template)."""
 
     def test_strips_vendor_path_prefix_not_vendor_word(self):
-        # Vendor-Praefix (vor dem letzten "/") faellt weg, aber "deepseek"
-        # im eigentlichen Modellnamen bleibt (kein Stopword-Filter mehr).
+        # Vendor prefix (before the last "/") is dropped, but "deepseek"
+        # in the actual model name stays (no more stopword filtering).
         self.assertEqual(fsm.pretty_model_name("deepseek-ai/DeepSeek-V4-Pro"),
                           "deepseek-v4-pro")
         self.assertEqual(fsm.pretty_model_name("deepseek-v4-pro"),
                           "deepseek-v4-pro")
 
     def test_keeps_dots_matching_repo_convention(self):
-        # Repo-Konvention: Minor-Versionen behalten den Punkt (kimi-k2.6,
-        # mistral-small-3.2), werden nicht zu Bindestrichen.
+        # Repo convention: minor versions keep the dot (kimi-k2.6,
+        # mistral-small-3.2), they don't turn into hyphens.
         self.assertEqual(fsm.pretty_model_name("moonshotai/Kimi-K2.5"),
                           "kimi-k2.5")
         self.assertEqual(fsm.pretty_model_name("moonshotai/Kimi-K2.7-Code"),
@@ -75,10 +77,10 @@ class TestPrettyModelName(unittest.TestCase):
 
 
 class TestZenGroups(unittest.TestCase):
-    """Tests fuer den Include-Bug (big-pickle vs big-pickle-extra)."""
+    """Tests for the include bug (big-pickle vs big-pickle-extra)."""
 
     def test_excludes_unrelated_substring_match(self):
-        # Zen = 'big-pickle'. 'big-pickle-extra' darf NICHT matchen.
+        # Zen = 'big-pickle'. 'big-pickle-extra' must NOT match.
         raw = {"p1": ["big-pickle"], "p2": ["big-pickle-extra"]}
         out = fsm.find_zen_groups(raw)
         self.assertIn("big-pickle", out)
@@ -86,15 +88,15 @@ class TestZenGroups(unittest.TestCase):
         self.assertEqual(set(out["big-pickle"].keys()), {"p1"})
 
     def test_includes_word_boundary_match(self):
-        # Zen = 'big-pickle', Modell 'big-pickle-mini' SOLL matchen (boundary)
+        # Zen = 'big-pickle', model 'big-pickle-mini' SHOULD match (boundary)
         raw = {"p1": ["big-pickle"], "p2": ["big-pickle-mini"]}
         out = fsm.find_zen_groups(raw)
-        # Beide normalisieren zu 'big-pickle' und 'big-pickle-mini'.
-        # 'big-pickle' und 'big-pickle-mini' sind durch '-' boundary getrennt,
-        # daher sollte 'big-pickle-mini' im Set sein.
-        # (Hauptkey in `out` ist 'big-pickle' via exakten Match.)
-        # Beide Modelle sollten unter dem key 'big-pickle' oder
-        # 'big-pickle-mini' einsortiert sein.
+        # Both normalize to 'big-pickle' and 'big-pickle-mini'.
+        # 'big-pickle' and 'big-pickle-mini' are separated by a '-'
+        # boundary, so 'big-pickle-mini' should be in the set.
+        # (The main key in `out` is 'big-pickle' via exact match.)
+        # Both models should end up filed under the key 'big-pickle' or
+        # 'big-pickle-mini'.
         all_keys = set()
         for provs in out.values():
             for models in provs.values():
@@ -107,7 +109,7 @@ class TestZenGroups(unittest.TestCase):
         self.assertEqual(out, {})
 
     def test_does_not_match_unrelated_substring(self):
-        # 'deepseek-v4-flash' darf nicht 'deepseek-v3-flash' aufnehmen
+        # 'deepseek-v4-flash' must not pull in 'deepseek-v3-flash'
         raw = {"p1": ["deepseek-v4-flash"], "p2": ["deepseek-v3-flash"]}
         out = fsm.find_zen_groups(raw)
         all_keys = set()
@@ -125,9 +127,9 @@ class TestBuildGroups(unittest.TestCase):
             "p2": ["gpt-oss-120b"],
         }
         groups = fsm.build_groups(raw)
-        # gpt-oss-120b hat 2 Provider, also in groups
+        # gpt-oss-120b has 2 providers, so it's in groups
         self.assertIn("gpt-oss-120b", groups)
-        # unique-thing-99 nur 1 Provider, also draussen
+        # unique-thing-99 only has 1 provider, so it's excluded
         self.assertNotIn("unique-thing-99", groups)
 
 
@@ -160,7 +162,7 @@ class TestLookupPrice(unittest.TestCase):
         e, k = fsm.lookup_price(self.pricing, "groq",
                                 "openai/gpt-oss-120b",
                                 with_fallback=True)
-        # cerebras hat niedrigere Kosten als openrouter und nvidia_nim
+        # cerebras has lower cost than openrouter and nvidia_nim
         self.assertEqual(k, "cerebras/gpt-oss-120b")
 
     def test_no_fallback_returns_none(self):
@@ -171,7 +173,7 @@ class TestLookupPrice(unittest.TestCase):
         self.assertIsNone(k)
 
     def test_vendor_strip(self):
-        # 'meta-llama/foo' sollte nach strip zu 'foo' werden
+        # 'meta-llama/foo' should become 'foo' after stripping
         e, k = fsm.lookup_price(self.pricing, "openrouter",
                                 "openai/gpt-oss-120b",
                                 with_fallback=False)
@@ -190,7 +192,7 @@ class TestBuildDeployment(unittest.TestCase):
     def test_nvidia_double_openai(self):
         lines = fsm.build_deployment("foo", "nvidia", "openai/gpt-oss-120b")
         text = "".join(lines)
-        # openai/openai/... ist die NVIDIA-Konvention
+        # openai/openai/... is the NVIDIA convention
         self.assertIn("model: openai/openai/gpt-oss-120b", text)
         self.assertIn("api_key: os.environ/NVIDIA_API_KEY", text)
         self.assertIn("api_base: https://integrate.api.nvidia.com/v1", text)
@@ -198,9 +200,9 @@ class TestBuildDeployment(unittest.TestCase):
     def test_ovhcloud_anonymous(self):
         lines = fsm.build_deployment("foo", "ovhcloud", "gpt-oss-120b")
         text = "".join(lines)
-        # OVHcloud ist "required=False" -- wenn der User die Env-Variable
-        # setzt (z.B. fuer hoehere Limits), wird sie benutzt.
-        # Im anonymen Fall rendert render-config.py spaeter "" hin.
+        # OVHcloud is "required=False" -- if the user sets the env
+        # variable (e.g. for higher limits), it gets used. In the
+        # anonymous case render-config.py later renders "" here.
         self.assertIn("api_key: os.environ/OVHCLOUD_API_KEY", text)
         self.assertIn("api_base: https://oai.endpoints.kepler.ai.cloud.ovh.net/v1", text)
 
@@ -213,16 +215,16 @@ class TestBuildDeployment(unittest.TestCase):
 
 class TestProviderToLitellmMapping(unittest.TestCase):
     def test_uses_centralized_config(self):
-        # Wenn providers_config.py geaendert wird, muss die Map mitziehen
+        # If providers_config.py changes, the map must follow along
         for name in fsm.PROVIDER_CONFIGS:
             with self.subTest(provider=name):
                 self.assertIn(name, fsm.PROVIDER_TO_LITELLM)
 
 
 class TestPaidVendorFilter(unittest.TestCase):
-    """Aggregatoren (OpenCode Zen, LLM7.io) mischen echte Open-Weight-Modelle
-    mit Zugriff auf kostenpflichtige Flaggschiff-APIs unter deren Marken.
-    Diese duerfen nie automatisch als 'free' uebernommen werden."""
+    """Aggregators (OpenCode Zen, LLM7.io) mix genuine open-weight models
+    with access to paid flagship APIs under their brands. These must
+    never be auto-adopted as 'free'."""
 
     def test_denies_known_paid_flagships_regardless_of_provider(self):
         denied = [
@@ -233,8 +235,9 @@ class TestPaidVendorFilter(unittest.TestCase):
             "gemini-3.5-flash", "gemini-3-flash-preview", "google/gemini-2.0",
             "grok-4.5", "grok-build-0.1", "x-ai/grok-2",
         ]
-        # Diese Vendoren veroeffentlichen NIE offene Gewichte -> Deny ueberall,
-        # auch ohne provider-Angabe und auch auf einem Open-Weight-Host wie HF.
+        # These vendors NEVER release open weights -> deny everywhere,
+        # even without a provider argument and even on an open-weight
+        # host like HF.
         for m in denied:
             with self.subTest(model=m):
                 self.assertTrue(fsm.is_paid_vendor_model(m))
@@ -242,18 +245,19 @@ class TestPaidVendorFilter(unittest.TestCase):
                 self.assertTrue(fsm.is_paid_vendor_model(m, "opencode-zen"))
 
     def test_denies_ambiguous_vendors_only_on_aggregators(self):
-        # GLM/MiniMax veroeffentlichen TEILWEISE offene Gewichte -- nur bei
-        # den API-Aggregatoren (wo unklar ist, ob's der offene Checkpoint
-        # oder die kostenpflichtige Flaggschiff-API ist) wird gefiltert.
+        # GLM/MiniMax PARTIALLY release open weights -- filtering only
+        # applies at the API aggregators (where it's unclear whether
+        # it's the open checkpoint or the paid flagship API).
         for m in ["glm-5", "glm-5.1", "glm-5.2", "minimax-m2.7", "minimax-m3", "MiniMax-Text-01"]:
             with self.subTest(model=m):
                 self.assertTrue(fsm.is_paid_vendor_model(m, "opencode-zen"))
                 self.assertTrue(fsm.is_paid_vendor_model(m, "llm7io"))
-                # Auf HuggingFace koennen nur echte Checkpoints liegen ->
-                # nicht gefiltert.
+                # HuggingFace can only host genuine checkpoints -> not
+                # filtered.
                 self.assertFalse(fsm.is_paid_vendor_model(m, "huggingface"))
-                # Ohne provider-Angabe (z.B. Stale-Check) ebenfalls nicht --
-                # die Ambiguitaet betrifft nur die Aggregatoren.
+                # Without a provider argument (e.g. stale check), also
+                # not filtered -- the ambiguity only concerns the
+                # aggregators.
                 self.assertFalse(fsm.is_paid_vendor_model(m))
 
     def test_allows_established_open_weight_models(self):
@@ -274,10 +278,10 @@ class TestPaidVendorFilter(unittest.TestCase):
 
 
 class TestHttpGetJsonUserAgent(unittest.TestCase):
-    """Regression: Cerebras/Groq/OpenCode Zen sitzen hinter Cloudflares
-    Bot-Schutz, der urllib's Default-User-Agent mit 403 ("error code: 1010",
-    ein WAF-Block, kein Auth-Fehler) blockiert. Ein browser-aehnlicher
-    User-Agent muss auf jedem Request gesetzt werden."""
+    """Regression: Cerebras/Groq/OpenCode Zen sit behind Cloudflare's bot
+    protection, which blocks urllib's default User-Agent with a 403
+    ("error code: 1010", a WAF block, not an auth error). A
+    browser-like User-Agent must be set on every request."""
 
     def test_default_user_agent_is_sent(self):
         import io
@@ -285,8 +289,8 @@ class TestHttpGetJsonUserAgent(unittest.TestCase):
 
         captured = {}
 
-        # http_get_json nutzt `with urlopen(...) as resp`, also braucht das
-        # Fake ein __enter__/__exit__ (io.BytesIO allein reicht nicht).
+        # http_get_json uses `with urlopen(...) as resp`, so the fake
+        # needs __enter__/__exit__ (io.BytesIO alone isn't enough).
         class FakeResp(io.BytesIO):
             def __enter__(self):
                 return self
@@ -328,8 +332,8 @@ class TestHttpGetJsonUserAgent(unittest.TestCase):
 
 
 class TestOpenRouterFreeFilter(unittest.TestCase):
-    """OpenRouter listet den Gesamtkatalog — nur Free-Modelle duerfen durch,
-    sonst kann --apply ein PAID-Modell in die Config schreiben."""
+    """OpenRouter lists its entire catalog — only free models may pass
+    through, otherwise --apply could write a PAID model into the config."""
 
     def test_filters_paid_models(self):
         data = {"data": [
@@ -347,7 +351,7 @@ class TestOpenRouterFreeFilter(unittest.TestCase):
         self.assertIn("zero-priced/model", out)
         self.assertNotIn("anthropic/claude-paid", out)
         self.assertNotIn("broken/pricing", out)
-        # Kein pricing-Feld -> prompt/completion 0 -> gilt als free
+        # No pricing field -> prompt/completion 0 -> counts as free
         self.assertIn("no-pricing-field", out)
 
     def test_free_suffix_always_included(self):
@@ -358,8 +362,8 @@ class TestOpenRouterFreeFilter(unittest.TestCase):
 
 
 class TestCohereModelParsing(unittest.TestCase):
-    """Regression: fruehere Version sammelte die ENDPOINT-Namen
-    ("chat"/"embed") statt der Modellnamen ein."""
+    """Regression: an earlier version collected the ENDPOINT names
+    ("chat"/"embed") instead of the model names."""
 
     def test_parses_model_names_not_endpoints(self):
         data = {"models": [
@@ -402,13 +406,13 @@ class TestGithubModelParsing(unittest.TestCase):
 
 
 class TestParseConfigBlockBoundaries(unittest.TestCase):
-    """Regression: parse_config() darf beim Block-Ende NIE ueber die
-    Leerzeile hinaus in den naechsten Kommentar-Header hineinlesen. Sonst
-    wird line_end zu gross berechnet und apply_to_config() fuegt neue
-    Deployments MITTEN in den falsch begrenzten Vorgaenger-Block ein
-    (live beobachtet: deepseek-r1-0528 (llm7io) wurde durch eine neue
-    gemma-4-31b-it-Insertion zerrissen, weil der HF-Nachbar-Block faelschlich
-    bis in den Kommentar-Header von 'qwen3-235b' hinein geparst wurde)."""
+    """Regression: parse_config() must NEVER read past the blank line at
+    a block's end into the next comment header. Otherwise line_end is
+    computed too large and apply_to_config() inserts new deployments
+    IN THE MIDDLE of the wrongly-bounded preceding block (observed live:
+    deepseek-r1-0528 (llm7io) got torn apart by a new gemma-4-31b-it
+    insertion because the neighboring HF block was mistakenly parsed all
+    the way into the comment header of 'qwen3-235b')."""
 
     def _write(self, tmpdir, text):
         from pathlib import Path
@@ -460,20 +464,20 @@ class TestParseConfigBlockBoundaries(unittest.TestCase):
             entries = existing["deepseek-r1-0528"]
             self.assertEqual(len(entries), 2)
             hf_entry = next(e for e in entries if e["provider"] == "huggingface")
-            # line_end MUSS bei "mode: chat" enden (12 Zeilen nach dem
-            # Leerzeilen-Trenner), NICHT bei den Kommentar-Header-Zeilen von
-            # qwen3-235b.
+            # line_end MUST end at "mode: chat" (12 lines after the blank-
+            # line separator), NOT at qwen3-235b's comment header lines.
             self.assertEqual(lines[hf_entry["line_end"]].strip(), "mode: chat")
             self.assertNotIn("qwen3-235b", lines[hf_entry["line_end"]])
 
 
 class TestApplyToConfigOrdering(unittest.TestCase):
-    """Regression: apply_to_config() muss new_blocks (komplett neue
-    model_names) VOR den Insertions in bestehende Bloecke einfuegen. ml_end
-    wird einmalig aus dem unveraenderten Text berechnet -- wuerden zuerst
-    die Insertions angewendet, waere der Index bei der new_blocks-Splice
-    stale und die neuen Bloecke landeten mitten im model_list statt am
-    Ende (live beobachtet: zerrissener deepseek-r1-0528-Block)."""
+    """Regression: apply_to_config() must insert new_blocks (entirely new
+    model_names) BEFORE the insertions into existing blocks. ml_end is
+    computed once from the unmodified text -- if the insertions were
+    applied first, the index would be stale by the time of the
+    new_blocks splice and the new blocks would land in the middle of
+    model_list instead of at the end (observed live: a torn-apart
+    deepseek-r1-0528 block)."""
 
     def _write_template(self, tmpdir):
         from pathlib import Path
@@ -528,10 +532,10 @@ class TestApplyToConfigOrdering(unittest.TestCase):
         with tempfile.TemporaryDirectory() as d:
             p = self._write_template(d)
             plan = [
-                # Neuer Provider fuer ein BESTEHENDES model_name (Insertion)
+                # New provider for an EXISTING model_name (insertion)
                 {"model_name": "existing-a", "provider": "cohere",
                  "model_id": "existing-a", "ic": 0.0, "oc": 0.0, "action": "add"},
-                # Komplett NEUES model_name (new_blocks)
+                # Entirely NEW model_name (new_blocks)
                 {"model_name": "brand-new", "provider": "huggingface",
                  "model_id": "org/brand-new", "ic": 0.0, "oc": 0.0, "action": "add"},
             ]
@@ -539,10 +543,10 @@ class TestApplyToConfigOrdering(unittest.TestCase):
             self.assertEqual(added, 2)
 
             result_text = p.read_text()
-            # Kein Deployment-Block darf abgeschnitten sein: jedes
-            # 'litellm_params:' muss noch sein zugehoeriges 'model_info:'
-            # mit 'mode: chat' im selben Block haben, bevor der naechste
-            # '- model_name:'/'router_settings:' beginnt.
+            # No deployment block may be truncated: every 'litellm_params:'
+            # must still have its matching 'model_info:' with 'mode: chat'
+            # in the same block, before the next '- model_name:'/
+            # 'router_settings:' begins.
             lines = result_text.splitlines(keepends=True)
             ml_start, ml_end = fsm._find_model_list_bounds(lines)
             existing = fsm._scan_existing_blocks(lines, ml_start, ml_end)
@@ -554,53 +558,52 @@ class TestApplyToConfigOrdering(unittest.TestCase):
             self.assertEqual({e["provider"] for e in existing["existing-a"]},
                               {"openrouter", "groq", "cohere"})
 
-            # Jeder gescannte Block muss vollstaendig sein: model_info.mode
-            # ist das LETZTE Feld, das build_deployment() schreibt. Fehlt
-            # es, wurde der Block von einer Einfuegung abgeschnitten (die
-            # blosse Anwesenheit von "model:" reicht NICHT als Check, da
-            # diese Zeile schon frueh im Block steht und auch in
-            # abgeschnittenen Bloecken vorhanden ist).
+            # Every scanned block must be complete: model_info.mode is
+            # the LAST field build_deployment() writes. If it's missing,
+            # the block was truncated by an insertion (the mere presence
+            # of "model:" is NOT enough of a check, since that line
+            # appears early in the block and is present in truncated
+            # blocks too).
             for mn, entries in existing.items():
                 for e in entries:
                     block_text = "".join(lines[e["line_start"]:e["line_end"] + 1])
                     self.assertIn("mode: chat", block_text,
-                                  f"{mn}/{e['provider']}: Block wirkt abgeschnitten "
-                                  f"(model_info.mode fehlt)")
+                                  f"{mn}/{e['provider']}: block looks truncated "
+                                  f"(model_info.mode missing)")
 
-            # router_settings + die urspruengliche Fallback-Chain muessen
-            # unversehrt und NACH dem model_list stehen.
+            # router_settings + the original fallback chain must be
+            # intact and AFTER model_list.
             self.assertIn("router_settings:", result_text)
             self.assertIn('"existing-a": ["existing-b"]', result_text)
             router_idx = result_text.index("router_settings:")
             brand_new_idx = result_text.index("brand-new")
             self.assertLess(brand_new_idx, router_idx,
-                             "neuer Block muss VOR router_settings stehen")
+                             "new block must appear BEFORE router_settings")
 
-            # Der urspruengliche Kommentar-Header von existing-b (oeffnende
-            # Trennlinie + Titel + schliessende Trennlinie) darf nicht durch
-            # neue Bloecke auseinandergerissen werden -- er muss als
-            # zusammenhaengender 4-Zeilen-Block direkt vor dessen
-            # '- model_name:'-Zeile stehen. (Bei der fehlerhaften Einfuege-
-            # Reihenfolge blieb genau die OEFFNENDE Trennlinie zurueck und
-            # wurde vom Rest des Headers getrennt -- die Block-
-            # Vollstaendigkeits-Checks oben erkennen das nicht, da der
-            # Blockinhalt selbst intakt bleibt, nur der davorstehende
-            # Header zerrissen wird.)
+            # existing-b's original comment header (opening separator +
+            # title + closing separator) must not be torn apart by new
+            # blocks -- it must appear as a contiguous 4-line block
+            # directly before its '- model_name:' line. (With the
+            # buggy insertion order, exactly the OPENING separator line
+            # was left behind, separated from the rest of the header --
+            # the block-completeness checks above don't catch this since
+            # the block content itself stays intact, only the header in
+            # front of it gets torn.)
             self.assertIn(
                 "  # ===========================================================================\n"
                 "  # existing-b  – 2 FREE PROVIDERS\n"
                 "  # ===========================================================================\n"
                 "  - model_name: existing-b\n",
                 result_text,
-                "Kommentar-Header von existing-b wurde durch neue Bloecke zerrissen",
+                "existing-b's comment header was torn apart by new blocks",
             )
 
 
 class TestGenerateApplyPlan(unittest.TestCase):
-    """Regression: Gruppen sind normalisiert benannt ("3-3-70b"), das
-    Template nutzt sprechende Namen ("llama-3.3-70b-instruct"). Ohne
-    Mapping wurden bestehende Deployments als "add" unter dem
-    normalisierten Namen geplant -> Duplikat-Bloecke."""
+    """Regression: groups are named in normalized form ("3-3-70b"), the
+    template uses descriptive names ("llama-3.3-70b-instruct"). Without
+    a mapping, existing deployments were planned as "add" under the
+    normalized name -> duplicate blocks."""
 
     def _existing(self):
         return {
@@ -619,7 +622,7 @@ class TestGenerateApplyPlan(unittest.TestCase):
         plan = fsm.generate_apply_plan(groups, {}, self._existing(), None)
         self.assertEqual(len(plan), 1)
         self.assertEqual(plan[0]["action"], "skip")
-        # Und unter dem TEMPLATE-Namen, nicht dem normalisierten
+        # And under the TEMPLATE name, not the normalized one
         self.assertEqual(plan[0]["model_name"], "llama-3.3-70b-instruct")
 
     def test_new_provider_added_under_template_name(self):
@@ -635,8 +638,8 @@ class TestGenerateApplyPlan(unittest.TestCase):
         self.assertEqual(adds[0]["model_name"], "llama-3.3-70b-instruct")
 
     def test_globally_existing_deployment_never_readded(self):
-        # Gleiches Deployment taucht in einer ANDERS normalisierten Gruppe
-        # auf -> darf trotzdem nicht erneut vorgeschlagen werden.
+        # The same deployment shows up in a DIFFERENTLY normalized group
+        # -> must still not be proposed again.
         groups = {"some-other-norm": {
             "openrouter": ["meta-llama/llama-3.3-70b-instruct:free"],
         }}
@@ -644,13 +647,12 @@ class TestGenerateApplyPlan(unittest.TestCase):
         self.assertTrue(all(p["action"] == "skip" for p in plan))
 
     def test_new_group_gets_pretty_name_not_raw_grouping_key(self):
-        # Regression: eine komplett NEUE Gruppe (kein existing-Match) bekam
-        # frueher den aggressiv STOPWORDS-bereinigten Grouping-Key als
-        # model_name ("v4" statt "deepseek-v4-pro"). generate_apply_plan
-        # muss stattdessen pretty_model_name() auf einer Original-ID
-        # anwenden.
+        # Regression: a completely NEW group (no existing match) used to
+        # get the aggressively STOPWORDS-cleaned grouping key as its
+        # model_name ("v4" instead of "deepseek-v4-pro"). generate_apply_plan
+        # must instead apply pretty_model_name() to an original ID.
         group_norm = fsm.normalize("deepseek-v4-pro")
-        self.assertEqual(group_norm, "v4")  # zur Doku: das war der Bug
+        self.assertEqual(group_norm, "v4")  # documenting: this was the bug
         groups = {group_norm: {
             "opencode-zen": ["deepseek-v4-pro"],
             "huggingface": ["deepseek-ai/DeepSeek-V4-Pro"],
@@ -718,8 +720,8 @@ class TestFindStaleDeployments(unittest.TestCase):
         with tempfile.TemporaryDirectory() as d:
             tmpl = self._template(d)
             raw = {
-                "cerebras": ["llama-4-maverick"],          # gpt-oss fehlt -> stale
-                "groq": ["openai/gpt-oss-120b"],           # vorhanden
+                "cerebras": ["llama-4-maverick"],          # gpt-oss missing -> stale
+                "groq": ["openai/gpt-oss-120b"],           # present
                 "openrouter": ["whatever:free"],           # exempt (openrouter-free)
             }
             stale = fsm.find_stale_deployments(tmpl, raw, partial=set())
@@ -732,9 +734,9 @@ class TestFindStaleDeployments(unittest.TestCase):
         with tempfile.TemporaryDirectory() as d:
             tmpl = self._template(d)
             raw = {
-                "cerebras": [],                      # leer -> uebersprungen
-                "groq": ["something-else"],          # partial -> uebersprungen
-                # openrouter fehlt (Fetch fehlgeschlagen) -> uebersprungen
+                "cerebras": [],                      # empty -> skipped
+                "groq": ["something-else"],          # partial -> skipped
+                # openrouter missing (fetch failed) -> skipped
             }
             stale = fsm.find_stale_deployments(tmpl, raw, partial={"groq"})
             self.assertEqual(stale, [])

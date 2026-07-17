@@ -1,26 +1,25 @@
 #!/usr/bin/env python3
 """
-Findet gemeinsame Modelle zwischen Providern und zeigt, was sie auf dem
-jeweiligen Paid-Tier kosten wuerden (Sparpotenzial-Anzeige).
+Finds models shared across providers and shows what they would cost on
+the respective paid tier (savings-potential report).
 
-Liest API-Keys aus .env, fragt pro Provider die verfuegbaren Modelle ab,
-gruppiert nach normalisiertem Namen und schreibt Provider-Kombinationen mit
-mindestens 2 gleichen Modellen in providers-overlap.txt.
+Reads API keys from .env, queries the available models per provider,
+groups them by normalized name, and writes provider combinations with
+at least 2 shared models to providers-overlap.txt.
 
-Zen-Modelle (deepseek-v4-flash, nemotron-3-ultra, big-pickle, north-mini-code)
-werden immer aufgenommen, sobald sie ueberhaupt bei irgendeinem Provider
-gefunden werden.
+Zen models (deepseek-v4-flash, nemotron-3-ultra, big-pickle, north-mini-code)
+are always included as soon as they show up at any provider at all.
 
-Preisdaten stammen aus der LiteLLM-Referenzdatenbank
+Pricing data comes from the LiteLLM reference database
 (https://raw.githubusercontent.com/BerriAI/litellm/main/model_prices_and_context_window.json,
- identisch mit https://models.litellm.ai/) und werden 24h lokal gecached
-(.cache/litellm-prices.json). Pro gemeinsam genutztem Modell zeigt der
-Report den hypothetischen Paid-Preis pro 1M Tokens fuer Input und Output --
-sodass sichtbar wird, wieviel die Free-Tier-Nutzung einspart.
+ identical to https://models.litellm.ai/) and is cached locally for 24h
+(.cache/litellm-prices.json). For each shared model, the report shows the
+hypothetical paid price per 1M tokens for input and output -- making it
+visible how much the free-tier usage saves.
 
-Nutzung:
+Usage:
     python3 find-shared-models.py
-    python3 find-shared-models.py --env /pfad/zur/.env
+    python3 find-shared-models.py --env /path/to/.env
     python3 find-shared-models.py --output report.txt
     python3 find-shared-models.py --refresh-pricing
     python3 find-shared-models.py --no-pricing
@@ -48,8 +47,8 @@ REPO_ROOT = Path(__file__).resolve().parent
 DEFAULT_ENV = REPO_ROOT / ".env"
 DEFAULT_OUTPUT = REPO_ROOT / "providers-overlap.txt"
 
-# LiteLLM model_prices_and_context_window.json (1.5MB, ~2800 Modelle).
-# Wird auch von https://models.litellm.ai/ als Datenquelle verwendet.
+# LiteLLM model_prices_and_context_window.json (1.5MB, ~2800 models).
+# Also used by https://models.litellm.ai/ as its data source.
 PRICING_URL = (
     "https://raw.githubusercontent.com/BerriAI/litellm/main/"
     "model_prices_and_context_window.json"
@@ -57,8 +56,8 @@ PRICING_URL = (
 PRICING_CACHE = REPO_ROOT / ".cache" / "litellm-prices.json"
 PRICING_TTL_SECONDS = 24 * 3600
 
-# Wie wir unsere Provider-Namen auf LiteLLM-Provider mappen.
-# Wird aus providers_config.py abgeleitet, damit eine einzige Quelle gilt.
+# How we map our provider names to LiteLLM providers.
+# Derived from providers_config.py so there is a single source of truth.
 PROVIDER_TO_LITELLM = {name: p.litellm_key for name, p in PROVIDER_CONFIGS.items()}
 
 ZEN_MODEL_NAMES = {
@@ -76,29 +75,28 @@ STOPWORDS = {
 }
 
 # ---------------------------------------------------------------------------
-# Paid-Vendor-Denylist
+# Paid-vendor denylist
 # ---------------------------------------------------------------------------
-# Aggregatoren wie OpenCode Zen und LLM7.io mischen echte Open-Weight-Modelle
-# mit (vermutlich proxied/resold) Zugriff auf kostenpflichtige Flaggschiff-
-# APIs grosser Anbieter unter deren Markennamen (z.B. "claude-opus-4-8",
-# "gpt-5.4", "gemini-3.5-flash", "grok-4.5", "glm-5.x", "minimax-m..."). Diese
-# Anbieter (Anthropic, OpenAI-GPT-Linie, Google Gemini, xAI, Zhipu/GLM-5,
-# MiniMax) veroeffentlichen ihre Flaggschiff-Modelle NICHT offen -- ein
-# "Free-Tier"-Proxy darf solche Eintraege nie automatisch als kostenlos
-# uebernehmen (irrefuehrend + ToS-Risiko), unabhaengig davon, welcher
-# Provider sie listet. Am 2026-07-16 in der Praxis in genau dieser Form bei
-# OpenCode Zen + LLM7.io aufgetreten.
+# Aggregators like OpenCode Zen and LLM7.io mix genuine open-weight models
+# with (presumably proxied/resold) access to paid flagship APIs of major
+# vendors under their brand names (e.g. "claude-opus-4-8", "gpt-5.4",
+# "gemini-3.5-flash", "grok-4.5", "glm-5.x", "minimax-m..."). These vendors
+# (Anthropic, OpenAI's GPT line, Google Gemini, xAI, Zhipu/GLM-5, MiniMax)
+# do NOT publish their flagship models openly -- a "free-tier" proxy must
+# never automatically adopt such entries as free (misleading + ToS risk),
+# regardless of which provider lists them. Observed in practice in exactly
+# this form at OpenCode Zen + LLM7.io on 2026-07-16.
 #
-# EXPLIZIT AUSGENOMMEN, weil es sich um echte Open-Weight-Linien handelt:
-#   gpt-oss   (OpenAIs offene Modelle, nicht die "gpt-5"/"gpt-4"-Flaggschiffe)
-#   gemma     (Googles offene Modelle, nicht "gemini")
-#   kimi/moonshotai (Moonshot AI open-sourced die komplette K2-Familie;
-#                    kimi-k2.6 ist bereits ein etabliertes Deployment)
-#   deepseek, qwen, llama, mistral, nemotron, command-r, codestral (etabliert)
+# EXPLICITLY EXEMPTED because these are genuine open-weight lines:
+#   gpt-oss   (OpenAI's open models, not the "gpt-5"/"gpt-4" flagships)
+#   gemma     (Google's open models, not "gemini")
+#   kimi/moonshotai (Moonshot AI open-sourced the entire K2 family;
+#                    kimi-k2.6 is already an established deployment)
+#   deepseek, qwen, llama, mistral, nemotron, command-r, codestral (established)
 #
-# Anthropic, OpenAIs GPT-Linie, Googles Gemini und xAI veroeffentlichen
-# diese Flaggschiff-Modelle NIE als offene Gewichte -- Deny gilt daher
-# ueberall, unabhaengig vom Provider.
+# Anthropic, OpenAI's GPT line, Google's Gemini, and xAI NEVER publish
+# these flagship models as open weights -- so the deny applies everywhere,
+# regardless of provider.
 PAID_VENDOR_PATTERNS = [
     re.compile(r"(?:^|/)claude(?:-|$)", re.IGNORECASE),
     re.compile(r"(?:^|/)gpt-5(?:\.\d+)?(?:-|$)", re.IGNORECASE),
@@ -107,12 +105,12 @@ PAID_VENDOR_PATTERNS = [
     re.compile(r"(?:^|/)grok(?:-|$)", re.IGNORECASE),
 ]
 
-# GLM (Zhipu/Z.ai) und MiniMax veroeffentlichen TEILWEISE offene Gewichte
-# (z.B. auf HuggingFace, wo strukturell nur echte Checkpoints liegen
-# koennen -- man kann kein API-only-Modell dorthin hochladen). Bei den
-# API-Aggregatoren OpenCode Zen/LLM7.io ist dagegen unklar, ob "glm-5"/
-# "minimax-m2.7" der offene Checkpoint oder die kostenpflichtige Flaggschiff-
-# API ist -- dort werden sie sicherheitshalber ausgefiltert.
+# GLM (Zhipu/Z.ai) and MiniMax publish SOME open weights (e.g. on
+# HuggingFace, where structurally only genuine checkpoints can live -- you
+# can't upload an API-only model there). At the API aggregators OpenCode
+# Zen/LLM7.io it's unclear, though, whether "glm-5"/"minimax-m2.7" is the
+# open checkpoint or the paid flagship API -- so they get filtered out
+# there as a precaution.
 AMBIGUOUS_VENDOR_PATTERNS = [
     re.compile(r"(?:^|/)glm-5", re.IGNORECASE),
     re.compile(r"(?:^|/)minimax", re.IGNORECASE),
@@ -121,12 +119,11 @@ AGGREGATOR_PROVIDERS = {"opencode-zen", "llm7io"}
 
 
 def is_paid_vendor_model(model_id: str, provider: str = "") -> bool:
-    """True, wenn model_id zu einem bekannten kostenpflichtigen
-    Flaggschiff-Modell eines grossen Anbieters passt (siehe
-    PAID_VENDOR_PATTERNS-Kommentar fuer die Begruendung + Ausnahmen).
-    `provider` steuert die zusaetzliche Ambiguous-Denylist (GLM-5/MiniMax),
-    die nur bei den API-Aggregatoren greift, nicht bei Open-Weight-Hosts
-    wie HuggingFace."""
+    """True if model_id matches a known paid flagship model of a major
+    vendor (see the PAID_VENDOR_PATTERNS comment for the rationale +
+    exemptions). `provider` controls the additional ambiguous denylist
+    (GLM-5/MiniMax), which only applies at the API aggregators, not at
+    open-weight hosts like HuggingFace."""
     if any(p.search(model_id) for p in PAID_VENDOR_PATTERNS):
         return True
     if provider in AGGREGATOR_PROVIDERS:
@@ -147,15 +144,15 @@ def load_env(path: Path) -> dict[str, str]:
     return env
 
 
-# Retry-Verhalten fuer Katalog-Abfragen: transiente Fehler (Netz, 429, 5xx)
-# sollen einen Provider nicht gleich fuer den ganzen Lauf disqualifizieren.
+# Retry behavior for catalog queries: transient errors (network, 429, 5xx)
+# shouldn't disqualify a provider for the whole run right away.
 HTTP_RETRIES = 3
-HTTP_BACKOFF_SECONDS = (1, 3)  # Wartezeit vor Retry 2 bzw. 3
+HTTP_BACKOFF_SECONDS = (1, 3)  # wait time before retry 2 and 3 respectively
 
-# Mehrere Provider (Cerebras, Groq, OpenCode Zen) sitzen hinter Cloudflares
-# Bot-Schutz, der urllib's Default-User-Agent ("Python-urllib/3.x") blockt
-# (403, "error code: 1010" -- ein WAF-Block, KEIN Auth-Fehler trotz 403).
-# Ein browser-aehnlicher User-Agent umgeht das zuverlaessig.
+# Several providers (Cerebras, Groq, OpenCode Zen) sit behind Cloudflare's
+# bot protection, which blocks urllib's default User-Agent
+# ("Python-urllib/3.x") (403, "error code: 1010" -- a WAF block, NOT an
+# auth error despite the 403). A browser-like User-Agent reliably avoids it.
 DEFAULT_USER_AGENT = "Mozilla/5.0 (X11; Linux x86_64) litellm-free-models/find-shared-models.py"
 
 
@@ -168,8 +165,8 @@ def http_get_json(url: str, headers: dict[str, str], timeout: int = 30) -> any:
             with urllib.request.urlopen(req, timeout=timeout) as resp:
                 return json.loads(resp.read().decode("utf-8", errors="replace"))
         except urllib.error.HTTPError as exc:
-            # Nur transiente HTTP-Fehler wiederholen; 4xx (ausser 429) sind
-            # deterministisch (falscher Key, falsche URL) -> sofort raus.
+            # Only retry transient HTTP errors; 4xx (except 429) are
+            # deterministic (wrong key, wrong URL) -> bail out immediately.
             if exc.code != 429 and exc.code < 500:
                 raise
             last_exc = exc
@@ -199,22 +196,22 @@ def short_key(name: str) -> str:
 
 def pretty_model_name(model_id: str) -> str:
     """
-    Leitet einen lesbaren model_name aus einer rohen Provider-Modell-ID ab
-    -- OHNE die aggressive STOPWORDS-Bereinigung von normalize().
+    Derives a readable model_name from a raw provider model ID -- WITHOUT
+    normalize()'s aggressive STOPWORDS cleanup.
 
-    normalize() ist fuer die GRUPPIERUNG gleicher Modelle ueber Provider
-    hinweg gedacht und entfernt Vendor-Woerter (u.a. "deepseek", "kimi",
-    "moonshotai") bewusst, weil viele Provider-IDs den Vendor doppelt
-    fuehren (z.B. "deepseek/deepseek-v4-pro" -- ohne Stopword-Filter
-    gruppiert das nicht mit "DeepSeek-V4-Pro" von einem anderen Provider).
-    Fuer den tatsaechlichen model_name ist dieselbe Bereinigung aber zu
-    aggressiv: aus "deepseek-v4-pro" wurde dadurch der unbrauchbare Name
-    "v4" (nur weil "deepseek" ein Stopword ist), aus "moonshotai/Kimi-K2.5"
-    wurde "k2-5" statt "kimi-k2.5".
+    normalize() is meant for GROUPING the same model across providers and
+    deliberately strips vendor words (including "deepseek", "kimi",
+    "moonshotai") because many provider IDs duplicate the vendor (e.g.
+    "deepseek/deepseek-v4-pro" -- without the stopword filter that
+    wouldn't group with "DeepSeek-V4-Pro" from another provider). For the
+    actual model_name, the same cleanup is too aggressive though: it turned
+    "deepseek-v4-pro" into the unusable name "v4" (just because "deepseek"
+    is a stopword), and "moonshotai/Kimi-K2.5" became "k2-5" instead of
+    "kimi-k2.5".
 
-    Nimmt daher nur das letzte Pfadsegment (Vendor-Praefix wie "org/" faellt
-    weg, der eigentliche Modellname bleibt erhalten), lowercased, ohne
-    ':tag'-Suffix (z.B. ':free'). Punkte bleiben erhalten (Repo-Konvention:
+    So this only takes the last path segment (the vendor prefix like "org/"
+    is dropped, the actual model name is kept), lowercased, without a
+    ':tag' suffix (e.g. ':free'). Dots are preserved (repo convention:
     "kimi-k2.6", "mistral-small-3.2").
     """
     tail = model_id.rsplit("/", 1)[-1]
@@ -226,15 +223,15 @@ def pretty_model_name(model_id: str) -> str:
 
 
 # ---------------------------------------------------------------------------
-# Provider-Definitionen
+# Provider definitions
 # ---------------------------------------------------------------------------
 
 def _filter_free_openrouter(data: dict) -> list[str]:
     """
-    OpenRouter listet den GESAMTEN Katalog (400+ Modelle, ueberwiegend paid).
-    Fuer einen Free-Tier-Proxy sind nur Modelle relevant, die kostenlos sind:
-    `:free`-Varianten oder Eintraege mit Prompt- UND Completion-Preis 0.
-    Ohne diesen Filter koennte --apply ein PAID-Modell in die Config schreiben.
+    OpenRouter lists its ENTIRE catalog (400+ models, mostly paid). For a
+    free-tier proxy only the actually-free models matter: `:free` variants
+    or entries with both prompt AND completion price at 0. Without this
+    filter, --apply could write a PAID model into the config.
     """
     out: list[str] = []
     for m in data.get("data", []):
@@ -281,10 +278,10 @@ def fetch_groq(key: str) -> list[str]:
 
 def fetch_cloudflare(api_key: str, api_base: str) -> list[str]:
     """
-    Cloudflare Workers AI hat KEIN OpenAI-kompatibles GET /v1/models
-    (405 Method Not Allowed). Der Katalog liegt unter
-    /accounts/{id}/ai/models/search (paginiert). api_base ist
-    .../accounts/<id>/ai/v1 -> /v1 abschneiden, /models/search anhaengen.
+    Cloudflare Workers AI has NO OpenAI-compatible GET /v1/models (405
+    Method Not Allowed). The catalog lives at
+    /accounts/{id}/ai/models/search (paginated). api_base is
+    .../accounts/<id>/ai/v1 -> strip /v1, append /models/search.
     """
     account_base = re.sub(r"/v1/?$", "", api_base.rstrip("/"))
     headers = {"Authorization": f"Bearer {api_key}"}
@@ -308,9 +305,9 @@ def fetch_cloudflare(api_key: str, api_base: str) -> list[str]:
 
 
 def _parse_google_models(data: dict) -> list[str]:
-    """Nur Chat-faehige Modelle (generateContent); Embedding-/AQA-Modelle
-    wie `embedding-001` sind fuer den Proxy irrelevant und verschmutzen
-    sonst die Overlap-Gruppen."""
+    """Chat-capable models only (generateContent); embedding/AQA models
+    like `embedding-001` are irrelevant for the proxy and would otherwise
+    pollute the overlap groups."""
     out: list[str] = []
     for m in data.get("models", []):
         name = m.get("name", "")
@@ -347,11 +344,11 @@ def fetch_mistral(key: str) -> list[str]:
 
 def _parse_cohere_models(data: dict) -> list[str]:
     """
-    Cohere liefert {"models": [{"name": "command-r-plus", "endpoints":
-    ["chat", ...]}, ...]}. Relevant sind die MODELL-Namen der chat-faehigen
-    Eintraege. (Eine fruehere Version sammelte faelschlich die
-    Endpoint-Namen "chat"/"generate"/"embed" ein — der Cohere-Katalog im
-    Report war dadurch unbrauchbar.)
+    Cohere returns {"models": [{"name": "command-r-plus", "endpoints":
+    ["chat", ...]}, ...]}. What matters are the MODEL names of the
+    chat-capable entries. (An earlier version mistakenly collected the
+    endpoint names "chat"/"generate"/"embed" instead -- the Cohere catalog
+    in the report was useless as a result.)
     """
     names: list[str] = []
     for m in data.get("models", []):
@@ -380,8 +377,8 @@ def fetch_cohere(key: str) -> list[str]:
 
 
 def _parse_github_models(data) -> list[str]:
-    """GitHub Models liefert je nach Endpoint eine nackte LISTE von
-    Modell-Objekten oder ein Dict mit models/data-Key."""
+    """GitHub Models returns either a bare LIST of model objects or a dict
+    with a models/data key, depending on the endpoint."""
     if isinstance(data, dict):
         items = data.get("models", data.get("data", []))
     else:
@@ -406,8 +403,9 @@ def fetch_github_models(token: str) -> list[str]:
 
 
 def fetch_opencode_zen(key: str) -> list[str]:
-    # HTTP-Fehler bewusst NICHT schlucken: ein 401 (falscher Key) soll als
-    # [FAIL] auftauchen statt als "[OK] 0 Modelle" durchzurutschen.
+    # Deliberately do NOT swallow HTTP errors: a 401 (wrong key) should
+    # show up as [FAIL] instead of silently slipping through as
+    # "[OK] 0 models".
     data = http_get_json(
         "https://opencode.ai/zen/v1/models",
         {"Authorization": f"Bearer {key}"},
@@ -425,13 +423,13 @@ def fetch_llm7io(key: str) -> list[str]:
 
 def fetch_ovhcloud(*_args) -> list[str]:
     """
-    OVHcloud AI Endpoints - OpenAI-kompatibel, **kein API-Key erforderlich**
-    (anonymer Free-Tier, 2 RPM/IP/Modell).
+    OVHcloud AI Endpoints - OpenAI-compatible, **no API key required**
+    (anonymous free tier, 2 RPM/IP/model).
 
-    Sendet bewusst KEINEN Authorization-Header, weil:
-      - `Authorization: Bearer` (leer)   -> 200 OK
-      - `Authorization: Bearer undefined` -> 403
-      - `Authorization: Bearer none`      -> 403
+    Deliberately sends NO Authorization header, because:
+      - `Authorization: Bearer` (empty)     -> 200 OK
+      - `Authorization: Bearer undefined`   -> 403
+      - `Authorization: Bearer none`        -> 403
     """
     data = http_get_json(
         "https://oai.endpoints.kepler.ai.cloud.ovh.net/v1/models",
@@ -440,8 +438,8 @@ def fetch_ovhcloud(*_args) -> list[str]:
     return [m["id"] for m in data.get("data", []) if m.get("id")]
 
 
-# Kuratierte Fallback-Liste, falls der Live-Katalog des HF-Routers nicht
-# erreichbar ist. Bewusst klein; der Live-Pfad ist der Normalfall.
+# Curated fallback list in case the HF router's live catalog isn't
+# reachable. Deliberately small; the live path is the normal case.
 HF_FALLBACK_MODELS = [
     "meta-llama/Llama-3.3-70B-Instruct",
     "meta-llama/Meta-Llama-3.1-8B-Instruct",
@@ -453,22 +451,22 @@ HF_FALLBACK_MODELS = [
     "openai/gpt-oss-20b",
 ]
 
-# Provider, deren Katalog im aktuellen Lauf NICHT vollstaendig ist (z.B.
-# HF-Fallback-Liste). Solche Kataloge duerfen nicht fuer die
-# Stale-Deployment-Erkennung benutzt werden (falsche Positive).
+# Providers whose catalog is NOT complete in the current run (e.g. the HF
+# fallback list). Such catalogs must not be used for stale-deployment
+# detection (false positives).
 PARTIAL_CATALOGS: set[str] = set()
 
-# { provider: [model_id, ...] } -- vom Paid-Vendor-Filter ausgefilterte
-# Modelle des aktuellen Laufs (fuer Transparenz im Report).
+# { provider: [model_id, ...] } -- models filtered out by the paid-vendor
+# filter in the current run (for transparency in the report).
 PAID_FILTERED: dict[str, list[str]] = {}
 
 
 def fetch_huggingface(token: str) -> list[str]:
     """
-    Fragt den HF Inference Router live ab (OpenAI-kompatibles /v1/models,
-    listet die tatsaechlich per Inference-Providern servierbaren Modelle).
-    Faellt nur bei Fehlern auf die kuratierte Liste zurueck — die alte,
-    hartkodierte 2024er-Liste (gemma-2, Phi-3.5, ...) war dauerhaft stale.
+    Queries the HF Inference Router live (OpenAI-compatible /v1/models,
+    lists the models actually servable via inference providers). Only
+    falls back to the curated list on errors -- the old, hardcoded 2024
+    list (gemma-2, Phi-3.5, ...) was permanently stale.
     """
     headers = {"Authorization": f"Bearer {token}"} if token else {}
     try:
@@ -511,7 +509,7 @@ _REQUIRED_ENV = {
     "cohere": ["COHERE_API_KEY"],
     "github": ["GITHUB_TOKEN"],
     "opencode-zen": ["OPENCODE_ZEN_API_KEY"],
-    # llm7io/huggingface/ovhcloud: Free-Tier ohne Pflicht-Key
+    # llm7io/huggingface/ovhcloud: free tier without a required key
     "llm7io": [],
     "huggingface": [],
     "ovhcloud": [],
@@ -523,15 +521,15 @@ def required_env(name: str) -> list[str]:
 
 
 # ---------------------------------------------------------------------------
-# Preisdaten (LiteLLM-Referenzdatenbank)
+# Pricing data (LiteLLM reference database)
 # ---------------------------------------------------------------------------
 
 def load_pricing(force_refresh: bool = False) -> dict[str, dict]:
     """
-    Laedt model_prices_and_context_window.json mit 24h-Cache.
+    Loads model_prices_and_context_window.json with a 24h cache.
 
-    Liefert ein Dict: { "openrouter/openai/gpt-oss-120b": {...}, ... }.
-    Bei Netzwerkfehler und vorhandenem Cache wird der Cache verwendet.
+    Returns a dict: { "openrouter/openai/gpt-oss-120b": {...}, ... }.
+    On a network error with an existing cache, the cache is used.
     """
     PRICING_CACHE.parent.mkdir(parents=True, exist_ok=True)
 
@@ -547,7 +545,7 @@ def load_pricing(force_refresh: bool = False) -> dict[str, dict]:
         data = http_get_json(PRICING_URL, {}, timeout=60)
     except Exception as exc:
         if PRICING_CACHE.exists():
-            print(f"  [WARN] Pricing-Download fehlgeschlagen ({exc}), nutze Cache.", file=sys.stderr)
+            print(f"  [WARN] Pricing download failed ({exc}), using cache.", file=sys.stderr)
             return json.loads(PRICING_CACHE.read_text(encoding="utf-8"))
         raise
 
@@ -556,7 +554,7 @@ def load_pricing(force_refresh: bool = False) -> dict[str, dict]:
 
 
 def _strip_vendor(model_id: str) -> str:
-    """Entfernt fuehrende Vendor-Praefixe (openai/, meta-llama/, ...)."""
+    """Removes leading vendor prefixes (openai/, meta-llama/, ...)."""
     parts = model_id.split("/", 1)
     if len(parts) == 2 and parts[0] in {
         "openai", "meta-llama", "mistralai", "google", "nvidia", "deepseek-ai",
@@ -568,7 +566,7 @@ def _strip_vendor(model_id: str) -> str:
 
 
 def _strip_free_suffix(model_id: str) -> str:
-    """':free' und '-free' entfernen, nicht aber '-free-free' doppelt."""
+    """Removes ':free' and '-free', but not doubled as '-free-free'."""
     s = re.sub(r":free$", "", model_id)
     s = re.sub(r"-free$", "", s)
     return s
@@ -576,10 +574,10 @@ def _strip_free_suffix(model_id: str) -> str:
 
 class _PricingIndex:
     """
-    Invertierter Index ueber die LiteLLM-Preisdatenbank:
+    Inverted index over the LiteLLM pricing database:
         model_norm_lower -> [(entry, db_key, cost_mix), ...]
-    wobei 'cost_mix' = 0.5M * ic + 0.5M * oc (fuer 1M Tokens 50/50 Mix).
-    Wird einmal pro Pricing-Load gebaut, danach O(1)-Lookups in lookup_price().
+    where 'cost_mix' = 0.5M * ic + 0.5M * oc (for a 50/50 mix over 1M tokens).
+    Built once per pricing load, then O(1) lookups in lookup_price().
     """
 
     __slots__ = ("by_name",)
@@ -623,7 +621,7 @@ def _get_pricing_index(pricing: dict[str, dict]) -> _PricingIndex:
 
 
 def _reset_pricing_index() -> None:
-    """Fuer Tests: Index invalidieren."""
+    """For tests: invalidate the index."""
     global _PRICING_INDEX
     _PRICING_INDEX = None
 
@@ -635,19 +633,19 @@ def lookup_price(
     with_fallback: bool = False,
 ) -> tuple[dict | None, str | None]:
     """
-    Mappt (provider, model_id) -> (DB-Eintrag, DB-Key) oder (None, None).
+    Maps (provider, model_id) -> (DB entry, DB key) or (None, None).
 
-    Beispiele:
+    Examples:
       ('openrouter', 'openai/gpt-oss-120b:free')  -> openrouter/openai/gpt-oss-120b
-      ('cerebras',   'gpt-oss-120b')             -> cerebras/gpt-oss-120b
-      ('nvidia',     'openai/gpt-oss-120b')      -> nvidia_nim/openai/gpt-oss-120b
+      ('cerebras',   'gpt-oss-120b')               -> cerebras/gpt-oss-120b
+      ('nvidia',     'openai/gpt-oss-120b')        -> nvidia_nim/openai/gpt-oss-120b
 
-    Mit with_fallback=True wird, falls kein direkter Match gefunden wird,
-    ueber alle LiteLLM-Provider nach demselben Modellnamen gesucht und der
-    Eintrag mit dem niedrigsten 'Mix-Preis' (Input+Output) zurueckgegeben.
+    With with_fallback=True, if no direct match is found, all LiteLLM
+    providers are searched for the same model name and the entry with the
+    lowest "mix price" (input+output) is returned.
 
-    Verwendet einen invertierten Index (_PricingIndex) ueber die Pricing-DB,
-    sodass Fallback-Suchen O(1) statt O(n) pro Aufruf sind.
+    Uses an inverted index (_PricingIndex) over the pricing DB, so fallback
+    lookups are O(1) instead of O(n) per call.
     """
     litellm_prov = PROVIDER_TO_LITELLM.get(provider)
     if not litellm_prov:
@@ -669,7 +667,7 @@ def lookup_price(
     if not with_fallback:
         return None, None
 
-    # Fallback: gleicher Modellname ueber alle LiteLLM-Provider (O(1) via Index)
+    # Fallback: same model name across all LiteLLM providers (O(1) via index)
     idx = _get_pricing_index(pricing)
     suffixes = {_strip_vendor(raw), _strip_free_suffix(raw),
                 _strip_free_suffix(_strip_vendor(raw)), raw}
@@ -686,12 +684,12 @@ def fmt_cost(per_token: float | None) -> str:
 
 
 # ---------------------------------------------------------------------------
-# Apply-Engine: config.yaml strukturell aktualisieren
+# Apply engine: update config.yaml structurally
 # ---------------------------------------------------------------------------
 
-# Provider -> (litellm_params Praefix, env_var, api_base env var oder None,
-#              rpm default, tpm default, requires api_base) wird zentral
-# aus providers_config.PROVIDERS abgeleitet -- keine Doppel-Pflege mehr.
+# Provider -> (litellm_params prefix, env_var, api_base env var or None,
+#              rpm default, tpm default, requires api_base) is derived
+# centrally from providers_config.PROVIDERS -- no more double maintenance.
 
 
 def build_deployment(
@@ -702,8 +700,8 @@ def build_deployment(
     oc: float = 0.0,
 ) -> list[str]:
     """
-    Erzeugt einen Deployment-Block (Liste von YAML-Zeilen, 2-Space-Indent) fuer
-    die model_list. Beispiel:
+    Creates a deployment block (list of YAML lines, 2-space indent) for
+    the model_list. Example:
 
       - model_name: gpt-oss-120b
         litellm_params:
@@ -716,16 +714,16 @@ def build_deployment(
           output_cost_per_token: 0
           mode: chat
 
-    tpm/rpm liegen in litellm_params (nicht auf Deployment-Top-Level),
-    damit usage-based-routing-v2 sie fuer Budget-Routing auswertet.
+    tpm/rpm live in litellm_params (not at the deployment top level), so
+    usage-based-routing-v2 evaluates them for budget routing.
     """
     prov = PROVIDER_CONFIGS[provider]
 
-    # model_id wird verbatim hinter den Provider-Prefix gehaengt.
-    # Fuer NVIDIA ist das z.B. "openai/openai/gpt-oss-120b" (gewollt, siehe
-    # AGENTS.md §2). Wenn model_id bereits einen Vendor-Prefix traegt
-    # (z.B. "openai/..."), entsteht "openai/openai/..." -- das ist die
-    # dokumentierte Konvention und wird von LiteLLM korrekt geroutet.
+    # model_id is appended verbatim after the provider prefix. For NVIDIA
+    # that's e.g. "openai/openai/gpt-oss-120b" (intentional, see AGENTS.md
+    # §2). If model_id already carries a vendor prefix (e.g. "openai/..."),
+    # you get "openai/openai/..." -- that's the documented convention and
+    # LiteLLM routes it correctly.
     model_str = f"{prov.prefix}/{model_id}"
 
     lines: list[str] = []
@@ -747,26 +745,26 @@ def build_deployment(
     lines.append(f"      input_cost_per_token: {_fmt_cost_yaml(ic)}\n")
     lines.append(f"      output_cost_per_token: {_fmt_cost_yaml(oc)}\n")
     lines.append("      mode: chat\n")
-    lines.append("\n")  # Leerzeile nach Block
+    lines.append("\n")  # blank line after the block
     return lines
 
 
 def _fmt_cost_yaml(value: float) -> str:
-    """Werte < 1e-3 als scientific notation (1e-07), 0 als 0."""
+    """Values < 1e-3 as scientific notation (1e-07), 0 as 0."""
     if value == 0:
         return "0"
     if value < 1e-3:
-        # z.B. 1e-07
+        # e.g. 1e-07
         return f"{value:g}"
     return f"{value}"
 
 
 def parse_config(path: Path) -> tuple[list[str], int, int, dict[str, list[dict]]]:
     """
-    Liest config.yaml zeilenbasiert. Liefert:
-      - alle Zeilen
-      - Index wo 'model_list:' steht (oder -1)
-      - Index wo 'router_settings:' (oder naechster top-level key) steht
+    Reads config.yaml line by line. Returns:
+      - all lines
+      - the index where 'model_list:' is (or -1)
+      - the index where 'router_settings:' (or the next top-level key) is
       - parsed existing models: { model_name: [ {provider, model_id, ic, oc, line_start, line_end} ] }
     """
     lines = path.read_text(encoding="utf-8").splitlines(keepends=True)
@@ -776,12 +774,11 @@ def parse_config(path: Path) -> tuple[list[str], int, int, dict[str, list[dict]]
 
 
 def _find_model_list_bounds(lines: list[str]) -> tuple[int, int]:
-    """Liefert (model_list_start, model_list_end) fuer eine gegebene
-    Zeilenliste. Wiederverwendet fuer sowohl die initiale Datei als auch
-    fuer bereits strukturell veraenderte new_lines (siehe apply_to_config:
-    Indizes verschieben sich nach jeder Einfuegung, daher muss nach
-    Struktur-Mutationen NEU gescannt werden statt alte Indizes weiter zu
-    benutzen)."""
+    """Returns (model_list_start, model_list_end) for a given list of
+    lines. Reused for both the initial file and for new_lines that have
+    already been structurally modified (see apply_to_config: indices shift
+    after every insertion, so bounds must be RE-scanned after structural
+    mutations instead of reusing stale indices)."""
     model_list_start = -1
     model_list_end = len(lines)
     for i, line in enumerate(lines):
@@ -800,13 +797,13 @@ def _find_model_list_bounds(lines: list[str]) -> tuple[int, int]:
 def _scan_existing_blocks(
     lines: list[str], model_list_start: int, model_list_end: int
 ) -> dict[str, list[dict]]:
-    """Scannt die Deployment-Bloecke zwischen model_list_start/-end und
-    liefert { model_name: [ {provider, model_id, ic, oc, line_start,
-    line_end}, ... ] }. Ausgelagert aus parse_config(), damit
-    apply_to_config() nach Struktur-Mutationen (neue Bloecke, Insertions)
-    frische line_start/line_end fuer den Kosten-Patch-Schritt bekommen kann
-    -- alte, vor der Mutation berechnete Indizes zeigen danach auf falsche
-    Zeilen (siehe Kommentar in apply_to_config)."""
+    """Scans the deployment blocks between model_list_start/-end and
+    returns { model_name: [ {provider, model_id, ic, oc, line_start,
+    line_end}, ... ] }. Factored out of parse_config() so apply_to_config()
+    can get fresh line_start/line_end for the cost-patch step after
+    structural mutations (new blocks, insertions) -- old indices computed
+    before the mutation would then point at the wrong lines (see the
+    comment in apply_to_config)."""
     existing: dict[str, list[dict]] = {}
     current_mn: str | None = None
     current_block_start = -1
@@ -816,7 +813,7 @@ def _scan_existing_blocks(
         nonlocal current_mn, current_block_start, current_block_lines
         if current_mn is None:
             return
-        # Parse model_id, api_base, ic, oc aus dem Block
+        # Parse model_id, api_base, ic, oc from the block
         model_id = ""
         api_base = ""
         ic = 0.0
@@ -837,12 +834,13 @@ def _scan_existing_blocks(
                     oc = float(s.split(":", 1)[1].strip())
                 except ValueError:
                     oc = 0.0
-        # Provider ableiten: render-config._provider_from_block nutzt neben
-        # dem Praefix auch die api_base — noetig, weil NVIDIA, GitHub Models,
-        # OpenCode Zen, LLM7.io und OVHcloud ALLE das 'openai/'-Praefix
-        # teilen. Ein reiner Praefix-Match ordnete frueher alle diese
-        # Deployments 'nvidia' zu, wodurch der Apply-Plan bestehende
-        # OVH-/GitHub-/LLM7-Deployments nicht erkannte und Duplikate plante.
+        # Derive provider: render-config._provider_from_block also uses
+        # api_base besides the prefix -- necessary because NVIDIA, GitHub
+        # Models, OpenCode Zen, LLM7.io, and OVHcloud ALL share the
+        # 'openai/' prefix. A plain prefix match used to lump all these
+        # deployments together as 'nvidia', which made the apply plan fail
+        # to recognize existing OVH/GitHub/LLM7 deployments and plan
+        # duplicates.
         provider = ""
         if "/" in model_id:
             provider = _load_render_config_cached()._provider_from_block(model_id, api_base)
@@ -867,17 +865,17 @@ def _scan_existing_blocks(
             current_block_lines = [line]
         elif current_mn is not None:
             if not line.strip():
-                # Leerzeile beendet IMMER den aktuellen Block. Deployment-
-                # Bloecke haben laut Konvention (siehe build_deployment())
-                # nie interne Leerzeilen. Die fruehere Version schaute nur
-                # 1 Zeile voraus und flushte nur, wenn direkt danach
-                # "- model_name:" kam -- folgte stattdessen ein Kommentar-
-                # Header (Leerzeile + 3 "#"-Zeilen vor dem naechsten
-                # Deployment), wurde der Header faelschlich in den aktuellen
-                # Block hineingezogen und dessen line_end um die Header-
-                # Laenge zu gross berechnet. Das liess apply_to_config neue
-                # Deployments MITTEN in den falsch begrenzten Vorgaenger-
-                # Block einfuegen statt danach.
+                # A blank line ALWAYS ends the current block. Deployment
+                # blocks never have internal blank lines by convention (see
+                # build_deployment()). The earlier version only looked 1
+                # line ahead and only flushed if "- model_name:" followed
+                # directly -- if a comment header followed instead (blank
+                # line + 3 "#" lines before the next deployment), the
+                # header was mistakenly pulled into the current block and
+                # its line_end was computed too large by the header's
+                # length. That made apply_to_config insert new deployments
+                # RIGHT IN THE MIDDLE of the wrongly-bounded previous block
+                # instead of after it.
                 flush()
                 current_mn = None
                 current_block_lines = []
@@ -889,7 +887,7 @@ def _scan_existing_blocks(
 
 
 def model_id_key(provider: str, model_id: str) -> str:
-    """Normalisiert (provider, model_id) zu einem Vergleichs-Key."""
+    """Normalizes (provider, model_id) into a comparison key."""
     return f"{provider}|{model_id.split('/')[-1].lower()}"
 
 
@@ -900,29 +898,29 @@ def generate_apply_plan(
     pricing: dict[str, dict] | None,
 ) -> list[dict]:
     """
-    Erzeugt eine Liste von Apply-Operationen:
+    Produces a list of apply operations:
       { 'model_name', 'provider', 'model_id', 'ic', 'oc', 'action' }
-    'action' ist 'add' (neuer Eintrag) oder 'update_costs' (bestehender
-    Eintrag bekommt Kosten) oder 'skip' (bereits vorhanden).
+    'action' is 'add' (new entry), 'update_costs' (existing entry gets
+    costs), or 'skip' (already present).
     """
     plan: list[dict] = []
-    # Kombiniere groups + zen_groups
+    # Combine groups + zen_groups
     all_groups: dict[str, dict[str, list[str]]] = {}
     for n, p in groups.items():
         all_groups.setdefault(n, {}).update(p)
     for n, p in zen_groups.items():
         all_groups.setdefault(n, {}).update(p)
 
-    # Gruppen sind NORMALISIERT benannt (z.B. "3-3-70b"), das Template nutzt
-    # sprechende model_names ("llama-3.3-70b-instruct"). Ohne dieses Mapping
-    # wuerde fast jedes bestehende Deployment als "neu" geplant und --apply
-    # legte Duplikat-Bloecke unter den normalisierten Namen an.
+    # Groups are NORMALIZED names (e.g. "3-3-70b"), the template uses
+    # readable model_names ("llama-3.3-70b-instruct"). Without this mapping
+    # almost every existing deployment would be planned as "new" and
+    # --apply would create duplicate blocks under the normalized names.
     norm_to_existing: dict[str, str] = {}
     for mn in existing:
         norm_to_existing.setdefault(normalize(mn), mn)
 
-    # Globales Dedupe-Set: ein Deployment, das bereits unter IRGENDEINEM
-    # model_name existiert, wird nie erneut vorgeschlagen.
+    # Global dedupe set: a deployment that already exists under ANY
+    # model_name is never proposed again.
     global_keys = {
         model_id_key(e["provider"], e["model_id"])
         for entries in existing.values()
@@ -933,12 +931,13 @@ def generate_apply_plan(
         if group_norm in norm_to_existing:
             model_name = norm_to_existing[group_norm]
         else:
-            # Neue Gruppe: sprechenden Namen aus einer Original-ID ableiten
-            # statt den aggressiv STOPWORDS-bereinigten Grouping-Key direkt
-            # als model_name zu verwenden (der waere z.B. "v4" statt
-            # "deepseek-v4-pro", oder "k2-5" statt "kimi-k2.5" -- siehe
-            # pretty_model_name()-Docstring). Deterministisch: alphabetisch
-            # erste Original-ID ueber alle Provider der Gruppe.
+            # New group: derive a readable name from one of the original
+            # IDs instead of using the aggressively STOPWORDS-cleaned
+            # grouping key directly as the model_name (that would be e.g.
+            # "v4" instead of "deepseek-v4-pro", or "k2-5" instead of
+            # "kimi-k2.5" -- see the pretty_model_name() docstring).
+            # Deterministic: the alphabetically first original ID across
+            # all providers of the group.
             sample_orig = min(o for origs in providers.values() for o in origs)
             model_name = pretty_model_name(sample_orig)
         existing_keys = set()
@@ -957,7 +956,7 @@ def generate_apply_plan(
                         "action": "skip",
                     })
                     continue
-                # Kosten mit Fallback bestimmen
+                # Determine cost with fallback
                 ic = 0.0
                 oc = 0.0
                 if pricing is not None:
@@ -981,18 +980,18 @@ def generate_apply_plan(
 
 
 def render_plan_diff(plan: list[dict]) -> str:
-    """Formatierter Plan-Output fuer Konsole/Report."""
+    """Formatted plan output for the console/report."""
     adds = [p for p in plan if p["action"] == "add"]
     skips = [p for p in plan if p["action"] == "skip"]
     lines: list[str] = []
-    lines.append(f"  Neue Deployments: {len(adds)}")
-    lines.append(f"  Bereits vorhanden (skip): {len(skips)}")
+    lines.append(f"  New deployments: {len(adds)}")
+    lines.append(f"  Already present (skip): {len(skips)}")
     lines.append("")
     by_model: dict[str, list[dict]] = {}
     for p in adds:
         by_model.setdefault(p["model_name"], []).append(p)
     for mn in sorted(by_model):
-        lines.append(f"  + {mn}  ({len(by_model[mn])} neue Provider)")
+        lines.append(f"  + {mn}  ({len(by_model[mn])} new provider(s))")
         for p in by_model[mn]:
             ic_s = fmt_cost(p["ic"])
             oc_s = fmt_cost(p["oc"])
@@ -1011,32 +1010,33 @@ def apply_to_config(
     pricing: dict[str, dict] | None = None,
 ) -> tuple[int, int, int]:
     """
-    Schreibt config.yaml neu:
-      - Fuegt neue Deployments am Ende des jeweiligen model_name-Blocks ein
-        (oder am Anfang von model_list wenn der Block noch nicht existiert)
-      - Aktualisiert model_info-Kosten fuer bestehende Eintraege mit 0-Werten
-        wo der Plan Kosten hat
-      - Aktualisiert router_settings.fallbacks und context_window_fallbacks
-    Liefert (added, costs_updated, fallbacks_added).
+    Rewrites config.yaml:
+      - Inserts new deployments at the end of the respective model_name
+        block (or creates a fresh block at the end of model_list if it
+        doesn't exist yet)
+      - Updates model_info costs for existing entries that are currently
+        0 where the plan proposes costs
+      - Updates router_settings.fallbacks and context_window_fallbacks
+    Returns (added, costs_updated, fallbacks_added).
     """
     lines, ml_start, ml_end, existing = parse_config(config_path)
     if ml_start < 0:
-        raise RuntimeError("model_list nicht gefunden in config.yaml")
+        raise RuntimeError("model_list not found in config.yaml")
 
-    # 1) Neue Deployments gruppieren pro model_name
+    # 1) Group new deployments by model_name
     adds_by_model: dict[str, list[dict]] = {}
     for p in plan:
         if p["action"] == "add":
             adds_by_model.setdefault(p["model_name"], []).append(p)
 
-    # 2) Welche model_names sind in der config?
+    # 2) Which model_names are already in the config?
     existing_model_names = set(existing.keys())
 
-    # 3) Neue Bloecke am Ende der model_list (vor ml_end) einfuegen
+    # 3) Insert new blocks at the end of model_list (before ml_end)
     new_blocks: list[str] = []
     for mn in sorted(adds_by_model):
         if mn not in existing_model_names:
-            # Kompletten neuen Block mit Header anlegen
+            # Create a full new block with header
             n_providers = len(adds_by_model[mn])
             header = (
                 f"  # ===========================================================================\n"
@@ -1049,11 +1049,11 @@ def apply_to_config(
                     build_deployment(mn, p["provider"], p["model_id"], p["ic"], p["oc"])
                 )
 
-    # 4) Bestehende Bloecke: neue Provider-Deployments am Ende einfuegen
+    # 4) Existing blocks: insert new provider deployments at the end
     insertions: list[tuple[int, list[str]]] = []  # (insert_index, lines_to_add)
     for mn, adds in adds_by_model.items():
         if mn in existing_model_names:
-            # Letzter Block-Index + 1
+            # Last block index + 1
             last_idx = max(e["line_end"] for e in existing[mn])
             new_lines: list[str] = []
             for p in adds:
@@ -1063,55 +1063,55 @@ def apply_to_config(
             if new_lines:
                 insertions.append((last_idx + 1, new_lines))
 
-    # 5) Anwenden: ERST neue Bloecke bei ml_end, DANN Insertions in
-    #    bestehende Bloecke (von hinten nach vorne).
+    # 5) Apply: FIRST new blocks at ml_end, THEN insertions into existing
+    #    blocks (back to front).
     #
-    #    Reihenfolge ist kein Stildetail: ml_end wurde EINMALIG aus dem
-    #    unveraenderten `lines` berechnet. Insertions (Schritt 4) fuegen
-    #    Zeilen an Indizes < ml_end ein und verschieben damit alles danach
-    #    nach hinten -- wuerden sie ZUERST angewendet, waere der (unan-
-    #    gepasste) ml_end-Index in der gewachsenen new_lines-Liste um genau
-    #    die Menge zu KLEIN und die new_blocks-Splice laendete irgendwo
-    #    MITTEN im model_list (live beobachtet: ein kompletter Batch neuer
-    #    Modell-Bloecke zerriss den bestehenden deepseek-r1-0528-Block).
-    #    Fuegt man new_blocks dagegen ZUERST bei ml_end ein (new_lines ist
-    #    an dieser Stelle noch identisch mit `lines`, der Index also noch
-    #    gueltig), bleiben alle Insertion-Indizes (< ml_end) unberuehrt.
+    #    The order is not a style detail: ml_end was computed ONCE from the
+    #    unmodified `lines`. Insertions (step 4) add lines at indices <
+    #    ml_end and thereby shift everything after them further back -- if
+    #    they were applied FIRST, the (un-adjusted) ml_end index in the
+    #    now-grown new_lines list would be too SMALL by exactly that
+    #    amount, and the new_blocks splice would land somewhere IN THE
+    #    MIDDLE of model_list (observed live: a whole batch of new model
+    #    blocks tore apart the existing deepseek-r1-0528 block). Inserting
+    #    new_blocks FIRST at ml_end instead (new_lines is still identical
+    #    to `lines` at that point, so the index is still valid) leaves all
+    #    insertion indices (< ml_end) untouched.
     new_lines = list(lines)
     added_count = 0
     costs_updated = 0
 
-    # Neue Bloecke vor ml_end (das ist die Position von router_settings:)
+    # New blocks before ml_end (that's the position of router_settings:)
     if new_blocks:
         insert_at = ml_end
-        # ml_end ist der Index der ersten nicht-indented Zeile nach model_list
+        # ml_end is the index of the first non-indented line after model_list
         new_lines[insert_at:insert_at] = new_blocks
         added_count += sum(
             1 for block in new_blocks for ln in block.split("\n")
             if ln.strip().startswith("- model_name:")
         )
 
-    # Insertions (von hinten, damit sich die Indizes untereinander nicht
-    # invalidieren) -- alle Indizes sind < ml_end und damit von der
-    # new_blocks-Splice oben unberuehrt.
+    # Insertions (back to front, so the indices don't invalidate each
+    # other) -- all indices are < ml_end and thus unaffected by the
+    # new_blocks splice above.
     for idx, new_block in sorted(insertions, key=lambda x: -x[0]):
         new_lines[idx:idx] = new_block
         added_count += sum(1 for ln in new_block if ln.strip().startswith("- model_name:"))
 
-    # 6) Kosten-Update fuer bestehende Eintraege mit 0-Werten
+    # 6) Cost update for existing entries with 0 values
     #
-    # WICHTIG: `existing` (aus dem urspruenglichen parse_config()-Call) hat
-    # line_start/line_end aus dem UNVERAENDERTEN Text. new_lines wurde
-    # oben aber bereits durch new_blocks + insertions strukturell veraendert
-    # -- ein Rescan ist zwingend, sonst patcht dieser Schritt Kosten-Zeilen
-    # an FALSCHEN (verschobenen) Positionen (dieselbe Bug-Klasse wie die
-    # new_blocks/ml_end-Korruption oben, hier fuer den Cost-Patch-Schritt).
+    # IMPORTANT: `existing` (from the original parse_config() call) has
+    # line_start/line_end from the UNMODIFIED text. new_lines above has
+    # already been structurally changed by new_blocks + insertions though
+    # -- a rescan is mandatory, otherwise this step patches cost lines at
+    # the WRONG (shifted) positions (the same class of bug as the
+    # new_blocks/ml_end corruption above, here for the cost-patch step).
     if pricing is not None:
         fresh_ml_start, fresh_ml_end = _find_model_list_bounds(new_lines)
         fresh_existing = _scan_existing_blocks(new_lines, fresh_ml_start, fresh_ml_end)
         new_lines, costs_updated = _update_existing_costs(new_lines, fresh_existing, plan)
 
-    # 7) Fallbacks ergaenzen
+    # 7) Add fallbacks
     new_lines, fallbacks_added = _update_fallbacks(new_lines, existing_model_names, adds_by_model)
 
     # 8) Atomic write via tmp + os.replace
@@ -1134,8 +1134,8 @@ def _update_existing_costs(
     plan: list[dict],
 ) -> tuple[list[str], int]:
     """
-    Setzt input_cost_per_token/output_cost_per_token in bestehenden Bloecken,
-    wo aktuell 0 ist und der Plan Kosten vorschlaegt.
+    Sets input_cost_per_token/output_cost_per_token on existing blocks
+    where it's currently 0 and the plan proposes costs.
     """
     # Map: (model_name, provider) -> (ic, oc)
     plan_costs: dict[tuple[str, str], tuple[float, float]] = {}
@@ -1160,7 +1160,7 @@ def _update_existing_costs(
                 continue
             if entry["ic"] != 0 or entry["oc"] != 0:
                 continue
-            # Zeile input_cost_per_token/output_cost_per_token im Block patchen
+            # Patch the input_cost_per_token/output_cost_per_token line in the block
             for i in range(entry["line_start"], entry["line_end"] + 1):
                 line = new_lines[i]
                 s = line.strip()
@@ -1187,14 +1187,14 @@ def _update_fallbacks(
     adds_by_model: dict[str, list[dict]],
 ) -> tuple[list[str], int]:
     """
-    Ergaenzt router_settings.fallbacks um neue model_names.
-    Catch-All '*' nur wenn >= 4 Provider vorhanden.
+    Adds new model_names to router_settings.fallbacks.
+    Catch-all '*' only when >= 4 providers exist.
     """
     new_model_names = set(adds_by_model.keys()) - existing_model_names
     if not new_model_names:
         return lines, 0
 
-    # Sinnvolle Reihenfolge: bekannte Capacity-Reserven
+    # Reasonable order: known capacity reserves
     fallback_pool = [
         "gpt-oss-120b", "llama-3.3-70b-instruct", "mistral-large",
         "gpt-oss-20b", "nemotron-3-120b", "command-r-plus", "llama-3.1-8b",
@@ -1202,7 +1202,7 @@ def _update_fallbacks(
 
     added = 0
     new_lines = list(lines)
-    # Finde die 'fallbacks:' Zeile (genau, nicht 'context_window_fallbacks:')
+    # Find the 'fallbacks:' line (exactly, not 'context_window_fallbacks:')
     fallbacks_idx = -1
     for i, ln in enumerate(lines):
         stripped = ln.strip()
@@ -1212,22 +1212,22 @@ def _update_fallbacks(
     if fallbacks_idx < 0:
         return lines, 0
 
-    # Finde Block-Ende: die 'fallbacks:' Zeile hat 2-Space-Indent, ihre Items
-    # 4-Space-Indent. Block endet bei einer Zeile mit 2-Space-Indent oder weniger,
-    # oder bei 'context_window_fallbacks:' / 'litellm_settings:' etc.
+    # Find block end: the 'fallbacks:' line has 2-space indent, its items
+    # have 4-space indent. The block ends at a line with 2-space indent or
+    # less, or at 'context_window_fallbacks:' / 'litellm_settings:' etc.
     block_end = len(new_lines)
     for i in range(fallbacks_idx + 1, len(new_lines)):
         s = new_lines[i]
         if not s.strip():
-            continue  # Leerzeilen ueberspringen
-        # Items haben 4-Space-Indent ('    - {"..."')
+            continue  # skip blank lines
+        # Items have 4-space indent ('    - {"..."')
         if s.startswith("    "):
             continue
-        # Sonst: 2-Space-Indent (router_settings-Nachbar) oder 0-Space (top-level)
+        # Otherwise: 2-space indent (router_settings sibling) or 0-space (top-level)
         block_end = i
         break
 
-    # Bestehende Keys parsen
+    # Parse existing keys
     existing_keys: set[str] = set()
     for i in range(fallbacks_idx + 1, block_end):
         # Pattern: - {"<key>": ...}
@@ -1235,7 +1235,7 @@ def _update_fallbacks(
         if m:
             existing_keys.add(m.group(1))
 
-    # Neue Zeilen vor block_end einfuegen
+    # Insert new lines before block_end
     insertions: list[str] = []
     for mn in sorted(new_model_names):
         if mn in existing_keys:
@@ -1244,9 +1244,9 @@ def _update_fallbacks(
         chain = [c for c in fallback_pool if c != mn][:4]
         chain_str = ", ".join(f'"{c}"' for c in chain)
         insertions.append(f'    - {{"{mn}": [{chain_str}]}}\n')
-        # Catch-All '*' nur bei >= 4 Providern. Chain-Ziele muessen aktuelle
-        # model_names sein; render-config.py filtert beim Rendern zusaetzlich
-        # alle Ziele raus, die nicht (mehr) in der model_list existieren.
+        # Catch-all '*' only with >= 4 providers. Chain targets must be
+        # current model_names; render-config.py additionally filters out
+        # any targets that no longer exist in the model_list when rendering.
         if n_prov >= 4 and "*" not in existing_keys:
             existing_keys.add("*")
             insertions.append(
@@ -1262,8 +1262,8 @@ def _update_fallbacks(
 
 def regenerate_multi_instance() -> bool:
     """
-    Ruft multi-instance/generate-config.py auf, falls vorhanden.
-    Liefert True bei Erfolg.
+    Calls multi-instance/generate-config.py if it exists.
+    Returns True on success.
     """
     import subprocess
     mi_dir = REPO_ROOT / "multi-instance"
@@ -1285,7 +1285,7 @@ def regenerate_multi_instance() -> bool:
         print(result.stderr, file=sys.stderr)
         return False
     except Exception as exc:
-        print(f"  [WARN] multi-instance Regenerierung fehlgeschlagen: {exc}", file=sys.stderr)
+        print(f"  [WARN] multi-instance regeneration failed: {exc}", file=sys.stderr)
         return False
 
 
@@ -1295,10 +1295,10 @@ def regenerate_multi_instance() -> bool:
 
 def collect_models(env: dict[str, str]) -> tuple[dict[str, list[str]], list[tuple[str, str]]]:
     """
-    Fragt alle Provider-Kataloge PARALLEL ab (frueher sequenziell mit
-    sleep dazwischen — bei 13 Providern unnoetig langsam). Ergebnisse werden
-    dedupliziert und sortiert; die Ausgabe erfolgt deterministisch in
-    PROVIDERS-Reihenfolge.
+    Queries all provider catalogs in PARALLEL (previously sequential with
+    a sleep in between -- needlessly slow with 13 providers). Results are
+    deduplicated and sorted; output happens deterministically in
+    PROVIDERS order.
     """
     from concurrent.futures import ThreadPoolExecutor
 
@@ -1311,7 +1311,7 @@ def collect_models(env: dict[str, str]) -> tuple[dict[str, list[str]], list[tupl
         for name, fn in PROVIDERS.items():
             needed = required_env(name)
             if any(not env.get(v) for v in needed):
-                errors.append((name, "Key fehlt: " + ", ".join(needed)))
+                errors.append((name, "Missing key: " + ", ".join(needed)))
                 continue
             futures[name] = pool.submit(fn, env)
 
@@ -1324,9 +1324,9 @@ def collect_models(env: dict[str, str]) -> tuple[dict[str, list[str]], list[tupl
                 paid = sorted({m for m in fetched if is_paid_vendor_model(m, name)})
                 models = sorted({m for m in fetched if not is_paid_vendor_model(m, name)})
                 raw[name] = models
-                partial = "  (unvollstaendiger Fallback-Katalog)" if name in PARTIAL_CATALOGS else ""
-                paid_note = f"  ({len(paid)} kostenpflichtige Flaggschiff-Modelle ausgefiltert)" if paid else ""
-                print(f"  [OK]   {name:14s} {len(models):4d} Modelle{partial}{paid_note}")
+                partial = "  (incomplete fallback catalog)" if name in PARTIAL_CATALOGS else ""
+                paid_note = f"  ({len(paid)} paid flagship model(s) filtered out)" if paid else ""
+                print(f"  [OK]   {name:14s} {len(models):4d} models{partial}{paid_note}")
                 if paid:
                     PAID_FILTERED.setdefault(name, []).extend(paid)
             except Exception as exc:
@@ -1337,7 +1337,7 @@ def collect_models(env: dict[str, str]) -> tuple[dict[str, list[str]], list[tupl
 
 def build_groups(raw: dict[str, list[str]]) -> dict[str, dict[str, list[str]]]:
     """
-    Liefert pro normalisiertem Namen: { provider: [originale Namen] }.
+    Returns, per normalized name: { provider: [original names] }.
     """
     groups: dict[str, dict[str, list[str]]] = defaultdict(lambda: defaultdict(list))
     for provider, models in raw.items():
@@ -1350,16 +1350,16 @@ def build_groups(raw: dict[str, list[str]]) -> dict[str, dict[str, list[str]]]:
 
 def find_zen_groups(raw: dict[str, list[str]]) -> dict[str, dict[str, list[str]]]:
     """
-    Zen-Modelle: Gruppe aufnehmen sobald sie bei einem Provider vorkommen.
-    Andere Provider werden inkludiert wenn sie das gleiche normalisierte Modell fuehren.
+    Zen models: include the group as soon as it shows up at any provider.
+    Other providers are included if they carry the same normalized model.
     """
     out: dict[str, dict[str, list[str]]] = {}
     groups = build_groups(raw)
     for zen in ZEN_MODEL_NAMES:
         zen_norm = normalize(zen)
-        # Korrekte Kandidatenwahl: exakter normalized match, oder
-        # Substring-Match nur an '-' Boundary, damit z.B. "big-pickle" nicht
-        # fälschlich "big-pickle-extra" aufnimmt.
+        # Correct candidate selection: exact normalized match, or a
+        # substring match only at a '-' boundary, so e.g. "big-pickle"
+        # doesn't wrongly pick up "big-pickle-extra".
         def _is_match(n: str) -> bool:
             if n == zen_norm:
                 return True
@@ -1378,15 +1378,15 @@ def find_zen_groups(raw: dict[str, list[str]]) -> dict[str, dict[str, list[str]]
     return out
 
 
-# model_names, die bewusst NICHT gegen Live-Kataloge geprueft werden
-# (Pseudo-/Router-Modelle, die in /models-Listings nicht auftauchen).
+# model_names that are deliberately NOT checked against live catalogs
+# (pseudo-/router models that don't show up in /models listings).
 STALE_CHECK_EXEMPT = {"openrouter-free"}
 
 
 def _native_model_id(model_id: str) -> str:
     """
-    Entfernt das LiteLLM-Routing-Praefix (erstes Pfadsegment) und liefert
-    die Provider-native Modell-ID:
+    Removes the LiteLLM routing prefix (first path segment) and returns
+    the provider-native model ID:
       openrouter/openai/gpt-oss-120b:free -> openai/gpt-oss-120b:free
       cerebras/gpt-oss-120b               -> gpt-oss-120b
       openai/openai/gpt-oss-120b (NVIDIA) -> openai/gpt-oss-120b
@@ -1403,13 +1403,13 @@ def find_stale_deployments(
     partial: set[str] | None = None,
 ) -> list[dict]:
     """
-    Findet Template-Deployments, deren Modell im LIVE-Katalog des Providers
-    nicht (mehr) vorkommt — die Gegenrichtung zum Apply-Plan, der nur
-    Neuzugaenge kennt. Report-only: Entfernungen bleiben bewusst manuell
-    (Kataloge flappen; vgl. gemma-3-12b-it-Historie).
+    Finds template deployments whose model no longer appears in the
+    provider's LIVE catalog -- the opposite direction of the apply plan,
+    which only knows about new additions. Report-only: removals stay
+    deliberately manual (catalogs flap; cf. the gemma-3-12b-it history).
 
-    Geprueft wird nur gegen Provider, deren Abfrage erfolgreich UND
-    vollstaendig war (keine leeren Kataloge, keine PARTIAL_CATALOGS).
+    Only checked against providers whose query succeeded AND was complete
+    (no empty catalogs, no PARTIAL_CATALOGS).
     """
     partial = PARTIAL_CATALOGS if partial is None else partial
     rc = _load_render_config_module()
@@ -1446,61 +1446,61 @@ def write_report(
     groups: dict[str, dict[str, list[str]]],
     zen_groups: dict[str, dict[str, list[str]]],
     pricing: dict[str, dict] | None = None,
-    pricing_status: str = "deaktiviert",
+    pricing_status: str = "disabled",
     plan: list[dict] | None = None,
     stale: list[dict] | None = None,
 ) -> None:
     lines: list[str] = []
     lines.append("=" * 78)
-    lines.append("LiteLLM Free-Models – Provider-Overlap Report")
-    lines.append("Erstellt: " + datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC"))
+    lines.append("LiteLLM Free-Models – Provider Overlap Report")
+    lines.append("Generated: " + datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC"))
     lines.append("=" * 78)
     lines.append("")
 
     lines.append("─" * 78)
-    lines.append("Abgefragte Provider")
+    lines.append("Queried providers")
     lines.append("─" * 78)
     for name in PROVIDERS:
         count = len(raw.get(name, []))
         if name in raw:
-            lines.append(f"  [+] {name:14s} {count:4d} Modelle")
+            lines.append(f"  [+] {name:14s} {count:4d} models")
         else:
-            msg = next((e for n, e in errors if n == name), "unbekannt")
-            lines.append(f"  [-] {name:14s} FEHLER: {msg}")
+            msg = next((e for n, e in errors if n == name), "unknown")
+            lines.append(f"  [-] {name:14s} ERROR: {msg}")
     lines.append("")
 
     lines.append("─" * 78)
-    lines.append(f"Modelle mit >= 2 Providern ({len(groups)} Eintraege)")
+    lines.append(f"Models with >= 2 providers ({len(groups)} entries)")
     lines.append("─" * 78)
     if not groups:
-        lines.append("  (keine)")
+        lines.append("  (none)")
     for norm in sorted(groups, key=lambda k: (-len(groups[k]), k)):
         providers = groups[norm]
         marker = " [ZEN]" if norm in {normalize(z) for z in ZEN_MODEL_NAMES} else ""
-        lines.append(f"\n  Modell: {norm}{marker}")
-        lines.append(f"  Provider: {len(providers)}")
+        lines.append(f"\n  Model: {norm}{marker}")
+        lines.append(f"  Providers: {len(providers)}")
         for p in sorted(providers):
             origs = ", ".join(sorted(set(providers[p])))
             lines.append(f"    - {p:14s} {origs}")
     lines.append("")
 
     lines.append("─" * 78)
-    lines.append("Zen-Modelle (immer enthalten, hohe Nutzungslimits)")
+    lines.append("Zen models (always included, high usage limits)")
     lines.append("─" * 78)
     for zen in sorted(ZEN_MODEL_NAMES):
         zen_norm = normalize(zen)
         match = zen_groups.get(zen_norm) or {}
         if match:
-            lines.append(f"\n  {zen}  (normalisiert: {zen_norm})")
+            lines.append(f"\n  {zen}  (normalized: {zen_norm})")
             for p in sorted(match):
                 lines.append(f"    - {p}: {', '.join(sorted(set(match[p])))}")
         else:
-            lines.append(f"\n  {zen}  (normalisiert: {zen_norm})")
-            lines.append("    - nicht in der Live-Abfrage gefunden")
+            lines.append(f"\n  {zen}  (normalized: {zen_norm})")
+            lines.append("    - not found in the live query")
     lines.append("")
 
     lines.append("─" * 78)
-    lines.append("Provider-Kombinationen mit >= 2 gemeinsamen Modellen")
+    lines.append("Provider combinations with >= 2 shared models")
     lines.append("─" * 78)
     pair_count: dict[tuple[str, str], int] = defaultdict(int)
     pair_models: dict[tuple[str, str], set[str]] = defaultdict(set)
@@ -1515,25 +1515,25 @@ def write_report(
     rows = [(p, c, pair_models[p]) for p, c in pair_count.items() if c >= 2]
     rows.sort(key=lambda r: (-r[1], r[0]))
     if not rows:
-        lines.append("  (keine Paare mit >= 2 gemeinsamen Modellen)")
+        lines.append("  (no pairs with >= 2 shared models)")
     for (a, b), count, models in rows:
-        lines.append(f"\n  {a}  <->  {b}   ({count} gemeinsame Modelle)")
+        lines.append(f"\n  {a}  <->  {b}   ({count} shared models)")
         for m in sorted(models):
             tag = " [ZEN]" if m in {normalize(z) for z in ZEN_MODEL_NAMES} else ""
             lines.append(f"      - {m}{tag}")
     lines.append("")
 
     # ------------------------------------------------------------------
-    # Verwaiste Template-Deployments (Modell nicht mehr im Provider-Katalog)
+    # Paid-vendor models filtered out
     # ------------------------------------------------------------------
     lines.append("─" * 78)
-    lines.append("Ausgefilterte kostenpflichtige Flaggschiff-Modelle (Paid-Vendor-Denylist)")
+    lines.append("Filtered-out paid flagship models (paid-vendor denylist)")
     lines.append("─" * 78)
-    lines.append("  Aggregatoren (OpenCode Zen, LLM7.io, ...) listen teils Modelle unter")
-    lines.append("  Markennamen kostenpflichtiger Flaggschiff-APIs (Claude, GPT-5.x, Gemini,")
-    lines.append("  Grok, GLM-5.x, MiniMax) -- diese werden NIE automatisch uebernommen.")
+    lines.append("  Aggregators (OpenCode Zen, LLM7.io, ...) sometimes list models under")
+    lines.append("  the brand names of paid flagship APIs (Claude, GPT-5.x, Gemini,")
+    lines.append("  Grok, GLM-5.x, MiniMax) -- these are NEVER adopted automatically.")
     if not PAID_FILTERED:
-        lines.append("  (keine gefunden)")
+        lines.append("  (none found)")
     else:
         for provider in sorted(PAID_FILTERED):
             lines.append(f"\n  {provider}:")
@@ -1542,38 +1542,38 @@ def write_report(
     lines.append("")
 
     lines.append("─" * 78)
-    lines.append("Verwaiste Template-Deployments (Modell fehlt im Live-Katalog)")
+    lines.append("Stale template deployments (model missing from the live catalog)")
     lines.append("─" * 78)
-    lines.append("  Report-only: Entfernungen bleiben manuell (Kataloge flappen).")
-    lines.append("  Geprueft nur gegen erfolgreich + vollstaendig abgefragte Provider.")
+    lines.append("  Report-only: removals stay manual (catalogs flap).")
+    lines.append("  Only checked against providers queried successfully and completely.")
     if stale is None:
-        lines.append("  (Pruefung uebersprungen: kein Template gefunden)")
+        lines.append("  (check skipped: no template found)")
     elif not stale:
-        lines.append("  (keine — alle Template-Deployments sind in den Katalogen vorhanden)")
+        lines.append("  (none — every template deployment is present in the catalogs)")
     else:
         for s in sorted(stale, key=lambda x: (x["provider"], x["model_name"])):
             lines.append(f"  [!] {s['provider']:14s} {s['model_name']:26s} -> {s['native_id']}")
     lines.append("")
 
     # ------------------------------------------------------------------
-    # Kosten & Ersparnis
+    # Cost & savings
     # ------------------------------------------------------------------
     lines.append("─" * 78)
-    lines.append("Kosten & Ersparnis (hypothetischer Paid-Tier-Preis)")
+    lines.append("Cost & savings (hypothetical paid-tier price)")
     lines.append("─" * 78)
-    lines.append(f"  Quelle: {pricing_status}")
+    lines.append(f"  Source: {pricing_status}")
     if not pricing:
-        lines.append("  (deaktiviert -- mit aktivem Pricing-Download erneut ausfuehren)")
+        lines.append("  (disabled -- rerun with pricing download enabled)")
     else:
-        # 1) Pro gemeinsamem Modell: was wuerde jeder Provider kosten?
+        # 1) Per shared model: what would each provider cost?
         lines.append("")
-        lines.append("  Pro gemeinsamem Modell, pro Provider (Preis in USD pro 1M Tokens):")
+        lines.append("  Per shared model, per provider (price in USD per 1M tokens):")
         lines.append("")
-        header = f"  {'Modell':40s}  {'Provider':14s}  {'Input':>12s}  {'Output':>12s}  {'DB-Key'}"
+        header = f"  {'Model':40s}  {'Provider':14s}  {'Input':>12s}  {'Output':>12s}  {'DB key'}"
         lines.append(header)
         lines.append("  " + "-" * (len(header) - 2))
         any_cost_row = False
-        # Kombiniere groups + zen_groups (beide normalisiert)
+        # Combine groups + zen_groups (both normalized)
         all_norm_groups: dict[str, dict[str, list[str]]] = {}
         for norm, provs in groups.items():
             all_norm_groups.setdefault(norm, {}).update(provs)
@@ -1604,20 +1604,20 @@ def write_report(
                 tag = " [ZEN]" if norm in {normalize(z) for z in ZEN_MODEL_NAMES} else ""
                 in_str = fmt_cost(ic_sum) if ic_sum else "n/a (free tier)"
                 out_str = fmt_cost(oc_sum) if oc_sum else "n/a (free tier)"
-                # kuerzester DB-Key als Anzeige (einer reicht)
+                # shortest DB key as display (one is enough)
                 lines.append(
                     f"  {norm[:38]+tag:40s}  {provider:14s}  {in_str:>12s}  {out_str:>12s}  {db_keys[0]}"
                 )
         if not any_cost_row:
-            lines.append("  (keine Paid-Preise in der DB fuer die gelisteten Modelle gefunden)")
+            lines.append("  (no paid prices found in the DB for the listed models)")
 
-        # 2) Pro-Provider-Summe: was haette der Free-Tier-Proxy pro 1M Tokens
-        #    hypothetisch gekostet, wenn man direkt bei jedem Provider waere?
-        #    Annahme: je 0.5M Input + 0.5M Output pro 1M Tokens.
+        # 2) Per-provider sum: what would the free-tier proxy have
+        #    hypothetically cost per 1M tokens if going directly to each
+        #    provider? Assumption: 0.5M input + 0.5M output per 1M tokens.
         lines.append("")
-        lines.append("  Hypothetische Provider-Kosten pro 1M Tokens (Mix: 500K Input + 500K Output):")
+        lines.append("  Hypothetical provider cost per 1M tokens (mix: 500K input + 500K output):")
         lines.append("")
-        lines.append(f"  {'Provider':14s}  {'Mix-Kosten':>14s}  {'Anzahl Modelle':>15s}")
+        lines.append(f"  {'Provider':14s}  {'Mix cost':>14s}  {'Model count':>15s}")
         lines.append("  " + "-" * 50)
         provider_sums: dict[str, tuple[float, int]] = {}
         for norm, provs in all_norm_groups.items():
@@ -1644,9 +1644,9 @@ def write_report(
             total, n = provider_sums[p]
             lines.append(f"  {p:14s}  ${total:>12.2f}  {n:>15d}")
 
-        # 3) Top-5 Sparpotenzial-Modelle
+        # 3) Top-5 savings-potential models
         lines.append("")
-        lines.append("  Top 5 Sparpotenzial (teuerster Paid-Preis pro Modell):")
+        lines.append("  Top 5 savings potential (most expensive paid price per model):")
         lines.append("")
         savings: list[tuple[str, float, str]] = []
         for norm, provs in all_norm_groups.items():
@@ -1669,29 +1669,29 @@ def write_report(
         savings.sort(key=lambda r: -r[1])
         for norm, cost, prov in savings[:5]:
             tag = " [ZEN]" if norm in {normalize(z) for z in ZEN_MODEL_NAMES} else ""
-            lines.append(f"  - {norm+tag:42s} waere ~${cost:.2f}/M auf {prov}")
+            lines.append(f"  - {norm+tag:42s} would be ~${cost:.2f}/M on {prov}")
         if not savings:
-            lines.append("  (keine Paid-Preise ermittelt)")
+            lines.append("  (no paid prices found)")
 
     # ------------------------------------------------------------------
-    # Apply-Plan (Diff-Vorschau fuer --apply)
+    # Apply plan (diff preview for --apply)
     # ------------------------------------------------------------------
     if plan is not None:
         lines.append("")
         lines.append("─" * 78)
-        lines.append("Apply-Plan (Vorschau; mit --apply wird das in config.yaml geschrieben)")
+        lines.append("Apply plan (preview; --apply writes this to config.yaml)")
         lines.append("─" * 78)
         adds = [p for p in plan if p["action"] == "add"]
         skips = [p for p in plan if p["action"] == "skip"]
-        lines.append(f"  Neue Deployments: {len(adds)}")
-        lines.append(f"  Bereits vorhanden (skip): {len(skips)}")
+        lines.append(f"  New deployments: {len(adds)}")
+        lines.append(f"  Already present (skip): {len(skips)}")
         if adds:
             lines.append("")
             by_model: dict[str, list[dict]] = {}
             for p in adds:
                 by_model.setdefault(p["model_name"], []).append(p)
             for mn in sorted(by_model):
-                lines.append(f"  + {mn}  ({len(by_model[mn])} neue Provider)")
+                lines.append(f"  + {mn}  ({len(by_model[mn])} new provider(s))")
                 for p in by_model[mn]:
                     ic_s = fmt_cost(p["ic"])
                     oc_s = fmt_cost(p["oc"])
@@ -1700,13 +1700,13 @@ def write_report(
                         f"in={ic_s:>12s}  out={oc_s:>12s}"
                     )
         if not adds and not skips:
-            lines.append("  (kein Plan -- eventuell config.yaml fehlt)")
+            lines.append("  (no plan -- config.yaml may be missing)")
 
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
 # ---------------------------------------------------------------------------
-# Deployment-Matrix-Generator (--emit-matrix / --write-docs)
+# Deployment matrix generator (--emit-matrix / --write-docs)
 # ---------------------------------------------------------------------------
 
 PROVIDER_DISPLAY = {
@@ -1730,8 +1730,8 @@ MATRIX_END = "<!-- END GENERATED MODEL MATRIX -->"
 
 
 def _load_render_config_module():
-    """Laedt render-config.py (Bindestrich im Namen) als Modul, um dessen
-    Block-Parser inkl. Provider-Diskrimination wiederzuverwenden."""
+    """Loads render-config.py (hyphen in the name) as a module so its
+    block parser incl. provider discrimination can be reused."""
     import importlib.util
     path = REPO_ROOT / "render-config.py"
     spec = importlib.util.spec_from_file_location("render_config", path)
@@ -1744,8 +1744,8 @@ _RC_MODULE = None
 
 
 def _load_render_config_cached():
-    """Gecachte Variante fuer heisse Pfade (parse_config ruft die
-    Provider-Diskrimination pro Deployment-Block auf)."""
+    """Cached variant for hot paths (parse_config calls provider
+    discrimination once per deployment block)."""
     global _RC_MODULE
     if _RC_MODULE is None:
         _RC_MODULE = _load_render_config_module()
@@ -1754,9 +1754,9 @@ def _load_render_config_cached():
 
 def build_matrix(template_path: Path) -> str:
     """
-    Erzeugt die Deployment-Matrix (Markdown-Tabelle) aus dem Template:
-    model_name -> Anzahl Deployments + Provider-Liste. Damit muss die
-    Tabelle in AGENTS.md/README.md nicht mehr von Hand gepflegt werden.
+    Builds the deployment matrix (Markdown table) from the template:
+    model_name -> deployment count + provider list. This means the table
+    in AGENTS.md/README.md no longer needs to be maintained by hand.
     """
     rc = _load_render_config_module()
     lines = template_path.read_text(encoding="utf-8").splitlines(keepends=True)
@@ -1777,10 +1777,10 @@ def build_matrix(template_path: Path) -> str:
 
     md: list[str] = []
     md.append(
-        f"Stand (aus `{template_path.name}` generiert): "
-        f"**{len(order)} model_names, {len(blocks)} base-Deployments**. "
-        f"`render-config.py` entfernt Deployments von Providern ohne "
-        f"API-Key in `.env` – die effektive Anzahl kann daher kleiner sein."
+        f"Snapshot (generated from `{template_path.name}`): "
+        f"**{len(order)} model_names, {len(blocks)} base deployments**. "
+        f"`render-config.py` removes deployments from providers without "
+        f"an API key in `.env` — the effective count can therefore be lower."
     )
     md.append("")
     md.append("| model_name | Deployments | Provider |")
@@ -1791,26 +1791,26 @@ def build_matrix(template_path: Path) -> str:
 
 
 def write_matrix_into_docs(matrix_md: str, doc_paths: list[Path]) -> int:
-    """Ersetzt den Inhalt zwischen den MATRIX-Markern in den Doku-Dateien."""
+    """Replaces the content between the MATRIX markers in the doc files."""
     updated = 0
     replacement = f"{MATRIX_BEGIN}\n{matrix_md}\n{MATRIX_END}"
     for p in doc_paths:
         if not p.exists():
-            print(f"  [WARN] {p} nicht gefunden, uebersprungen")
+            print(f"  [WARN] {p} not found, skipped")
             continue
         text = p.read_text(encoding="utf-8")
         if MATRIX_BEGIN not in text or MATRIX_END not in text:
-            print(f"  [WARN] Marker fehlen in {p.name}, uebersprungen "
-                  f"(erwartet: {MATRIX_BEGIN})")
+            print(f"  [WARN] Markers missing in {p.name}, skipped "
+                  f"(expected: {MATRIX_BEGIN})")
             continue
         pattern = re.escape(MATRIX_BEGIN) + r".*?" + re.escape(MATRIX_END)
         new_text = re.sub(pattern, replacement.replace("\\", r"\\"), text, count=1, flags=re.DOTALL)
         if new_text != text:
             p.write_text(new_text, encoding="utf-8")
-            print(f"  Matrix aktualisiert in {p.name}")
+            print(f"  Matrix updated in {p.name}")
             updated += 1
         else:
-            print(f"  {p.name} bereits aktuell")
+            print(f"  {p.name} already up to date")
     return updated
 
 
@@ -1820,46 +1820,46 @@ def main() -> int:
         description=__doc__,
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
-    ap.add_argument("--env", type=Path, default=DEFAULT_ENV, help="Pfad zur .env-Datei")
-    ap.add_argument("--output", type=Path, default=DEFAULT_OUTPUT, help="Output-Datei")
+    ap.add_argument("--env", type=Path, default=DEFAULT_ENV, help="Path to the .env file")
+    ap.add_argument("--output", type=Path, default=DEFAULT_OUTPUT, help="Output file")
     ap.add_argument("--no-pricing", action="store_true",
-                    help="Preis-Download ueberspringen (kein Kosten-Report)")
+                    help="Skip the pricing download (no cost report)")
     ap.add_argument("--refresh-pricing", action="store_true",
-                    help="Preis-Cache ignorieren und neu von GitHub laden")
+                    help="Ignore the pricing cache and reload from GitHub")
     ap.add_argument("--pricing-url", default=PRICING_URL,
-                    help="Alternative URL fuer model_prices_and_context_window.json "
+                    help="Alternative URL for model_prices_and_context_window.json "
                          "(default: GitHub raw)")
     ap.add_argument("--pricing-cache", type=Path, default=PRICING_CACHE,
-                    help="Lokaler Cache-Pfad fuer die Preis-DB")
+                    help="Local cache path for the pricing DB")
     ap.add_argument("--config", type=Path,
                     default=REPO_ROOT / "config.yaml",
-                    help="Fallback-Pfad zu config.yaml. Wird nur genutzt wenn "
-                         "kein config.template.yaml existiert (alter Stand ohne "
-                         "Template-Pipeline).")
+                    help="Fallback path to config.yaml. Only used when "
+                         "config.template.yaml doesn't exist (old state "
+                         "without the template pipeline).")
     ap.add_argument("--template", type=Path,
                     default=REPO_ROOT / "config.template.yaml",
-                    help="Pfad zu config.template.yaml (Single Source of Truth). "
-                         "Wenn vorhanden, schreibt --apply ins Template und ruft "
-                         "render-config.py danach auf.")
+                    help="Path to config.template.yaml (single source of truth). "
+                         "If present, --apply writes to the template and calls "
+                         "render-config.py afterwards.")
     ap.add_argument("--apply", action="store_true",
-                    help="Aenderungen in config.template.yaml schreiben (Single "
-                         "Source of Truth) und via render-config.py nach "
-                         "config.yaml rendern (default: nur Diff im Report)")
+                    help="Write changes to config.template.yaml (single "
+                         "source of truth) and render them to config.yaml "
+                         "via render-config.py (default: diff in the report only)")
     ap.add_argument("--regen-multi-instance", action="store_true",
-                    help="Nach --apply multi-instance/generate-config.py ausfuehren")
+                    help="Run multi-instance/generate-config.py after --apply")
     ap.add_argument("--emit-matrix", action="store_true",
-                    help="Deployment-Matrix (Markdown) aus dem Template nach "
-                         "stdout schreiben und beenden (keine API-Abfragen)")
+                    help="Write the deployment matrix (Markdown) from the "
+                         "template to stdout and exit (no API queries)")
     ap.add_argument("--write-docs", action="store_true",
-                    help="Deployment-Matrix zwischen die Marker-Kommentare in "
-                         "AGENTS.md und README.md schreiben und beenden")
+                    help="Write the deployment matrix between the marker "
+                         "comments in AGENTS.md and README.md and exit")
     args = ap.parse_args()
 
-    # Matrix-Modi brauchen weder .env noch Provider-Abfragen
+    # Matrix modes need neither .env nor provider queries
     if args.emit_matrix or args.write_docs:
         src = args.template if args.template.exists() else args.config
         if not src.exists():
-            print(f"FEHLER: {src} nicht gefunden.", file=sys.stderr)
+            print(f"ERROR: {src} not found.", file=sys.stderr)
             return 2
         matrix = build_matrix(src)
         if args.write_docs:
@@ -1872,11 +1872,11 @@ def main() -> int:
 
     env = load_env(args.env)
     if not env:
-        print(f"FEHLER: {args.env} nicht gefunden oder leer.", file=sys.stderr)
+        print(f"ERROR: {args.env} not found or empty.", file=sys.stderr)
         return 2
 
-    print(f"Lade .env aus {args.env}")
-    print("Abfrage laeuft...\n")
+    print(f"Loading .env from {args.env}")
+    print("Querying...\n")
     raw, errors = collect_models(env)
     print()
 
@@ -1884,15 +1884,15 @@ def main() -> int:
     zen_groups = find_zen_groups(raw)
 
     pricing: dict[str, dict] | None = None
-    pricing_status = "deaktiviert"
+    pricing_status = "disabled"
     if not args.no_pricing:
-        # Cache-Pfad zur Laufzeit patchen (ermoeglicht --pricing-cache Override)
+        # Patch the cache path at runtime (enables the --pricing-cache override)
         PRICING_CACHE = args.pricing_cache
         PRICING_CACHE.parent.mkdir(parents=True, exist_ok=True)
         url = args.pricing_url
         try:
-            # Bei Refresh muss der Pricing-Index neu gebaut werden, sonst
-            # verweist er noch auf die alte DB.
+            # On refresh, the pricing index must be rebuilt, otherwise it
+            # would still point at the old DB.
             if args.refresh_pricing:
                 _reset_pricing_index()
             pricing = load_pricing(force_refresh=args.refresh_pricing)
@@ -1900,23 +1900,23 @@ def main() -> int:
             if PRICING_CACHE.exists():
                 age_s = time.time() - PRICING_CACHE.stat().st_mtime
                 if age_s < 60:
-                    cache_age = "live (<1 min alt)"
+                    cache_age = "live (<1 min old)"
                 elif age_s < PRICING_TTL_SECONDS:
-                    cache_age = f"Cache ({int(age_s // 3600)}h {int(age_s % 3600 // 60)}m alt)"
+                    cache_age = f"cache ({int(age_s // 3600)}h {int(age_s % 3600 // 60)}m old)"
                 else:
-                    cache_age = f"Cache (abgelaufen, {int(age_s // 3600)}h)"
+                    cache_age = f"cache (expired, {int(age_s // 3600)}h)"
             pricing_status = (
                 f"{url}  |  {cache_age}  |  "
-                f"{len([k for k in pricing if k != 'sample_spec'])} Modelleintraege"
+                f"{len([k for k in pricing if k != 'sample_spec'])} model entries"
             )
-            print(f"Preis-DB: {pricing_status}")
+            print(f"Pricing DB: {pricing_status}")
         except Exception as exc:
-            print(f"  [WARN] Pricing-Download fehlgeschlagen: {exc}", file=sys.stderr)
+            print(f"  [WARN] Pricing download failed: {exc}", file=sys.stderr)
             pricing = None
-            pricing_status = f"fehlgeschlagen ({exc})"
+            pricing_status = f"failed ({exc})"
 
-    # Apply-Plan (nur wenn config oder template existiert; sonst nur Report).
-    # Template hat Vorrang, weil es Single Source of Truth ist.
+    # Apply plan (only if config or template exists; otherwise report only).
+    # The template takes precedence because it's the single source of truth.
     plan: list[dict] = []
     target_for_apply: Path | None = None
     is_template = False
@@ -1925,52 +1925,52 @@ def main() -> int:
         is_template = True
         _, _, _, existing = parse_config(args.template)
         plan = generate_apply_plan(groups, zen_groups, existing, pricing)
-        print(f"\nApply-Plan (Template): {len([p for p in plan if p['action'] == 'add'])} "
-              f"neue Deployments, {len([p for p in plan if p['action'] == 'skip'])} bereits vorhanden")
+        print(f"\nApply plan (template): {len([p for p in plan if p['action'] == 'add'])} "
+              f"new deployment(s), {len([p for p in plan if p['action'] == 'skip'])} already present")
     elif args.config.exists():
         target_for_apply = args.config
         _, _, _, existing = parse_config(args.config)
         plan = generate_apply_plan(groups, zen_groups, existing, pricing)
-        print(f"\nApply-Plan (config.yaml): {len([p for p in plan if p['action'] == 'add'])} "
-              f"neue Deployments, {len([p for p in plan if p['action'] == 'skip'])} bereits vorhanden")
+        print(f"\nApply plan (config.yaml): {len([p for p in plan if p['action'] == 'add'])} "
+              f"new deployment(s), {len([p for p in plan if p['action'] == 'skip'])} already present")
     else:
-        print(f"\n  [WARN] weder {args.template} noch {args.config} gefunden, "
-              "Apply-Plan uebersprungen.", file=sys.stderr)
+        print(f"\n  [WARN] Neither {args.template} nor {args.config} found, "
+              "skipping apply plan.", file=sys.stderr)
 
-    # Gegenrichtung zum Apply-Plan: Template-Deployments, deren Modell im
-    # Live-Katalog fehlt (report-only, keine automatische Entfernung).
+    # Opposite direction of the apply plan: template deployments whose
+    # model is missing from the live catalog (report-only, no automatic removal).
     stale: list[dict] | None = None
     if args.template.exists() and raw:
         stale = find_stale_deployments(args.template, raw)
         if stale:
-            print(f"\n[WARN] {len(stale)} Template-Deployment(s) nicht mehr im "
-                  f"Provider-Katalog gefunden — Details im Report (Abschnitt "
-                  f"'Verwaiste Template-Deployments').")
+            print(f"\n[WARN] {len(stale)} template deployment(s) no longer found "
+                  f"in the provider catalog — see the report (section "
+                  f"'Stale template deployments') for details.")
 
     write_report(args.output, raw, errors, groups, zen_groups, pricing,
                  pricing_status, plan, stale)
-    print(f"\nReport geschrieben nach: {args.output}")
+    print(f"\nReport written to: {args.output}")
 
     if args.apply and plan and target_for_apply is not None:
         any_adds = any(p["action"] == "add" for p in plan)
         if not any_adds:
-            print("\nKeine neuen Deployments, config.yaml bleibt unveraendert.")
+            print("\nNo new deployments, config.yaml stays unchanged.")
             return 0
         print("\n" + "=" * 78)
         if is_template:
-            print(f"APPLY -- schreibe Aenderungen ins Template {args.template}")
+            print(f"APPLY -- writing changes to the template {args.template}")
         else:
-            print(f"APPLY -- schreibe Aenderungen nach {args.config}")
+            print(f"APPLY -- writing changes to {args.config}")
         print("=" * 78)
         print(render_plan_diff(plan))
         added, costs, fallbacks = apply_to_config(
             target_for_apply, plan, groups, zen_groups, pricing,
         )
-        print(f"\n  Deployments hinzugefuegt: {added}")
-        print(f"  Kosten aktualisiert:      {costs}")
-        print(f"  Fallbacks ergaenzt:       {fallbacks}")
+        print(f"\n  Deployments added:  {added}")
+        print(f"  Costs updated:      {costs}")
+        print(f"  Fallbacks added:    {fallbacks}")
         if is_template:
-            print("\n  Rendere config.template.yaml -> config.yaml via render-config.py ...")
+            print("\n  Rendering config.template.yaml -> config.yaml via render-config.py ...")
             import subprocess
             render_script = REPO_ROOT / "render-config.py"
             if render_script.exists():
@@ -1986,22 +1986,22 @@ def main() -> int:
                     print(f"  [WARN] render-config.py exit={result.returncode}", file=sys.stderr)
                     print(result.stderr, file=sys.stderr)
             else:
-                print(f"  [WARN] {render_script} fehlt, ueberspringe Render.", file=sys.stderr)
+                print(f"  [WARN] {render_script} missing, skipping render.", file=sys.stderr)
         if args.regen_multi_instance:
-            print("\n  Regeneriere multi-instance/ ...")
+            print("\n  Regenerating multi-instance/ ...")
             regenerate_multi_instance()
-        print(f"\nFertig. Backup unter {target_for_apply}.bak.*")
+        print(f"\nDone. Backup at {target_for_apply}.bak.*")
         return 0
     elif not args.apply and plan:
         if is_template:
-            print(f"\nTipp: mit --apply werden die {len([p for p in plan if p['action'] == 'add'])} "
-                  "neuen Deployments in config.template.yaml geschrieben und "
-                  "anschliessend via render-config.py in config.yaml gerendert.")
+            print(f"\nTip: with --apply, the {len([p for p in plan if p['action'] == 'add'])} "
+                  "new deployment(s) will be written to config.template.yaml and "
+                  "then rendered into config.yaml via render-config.py.")
         else:
-            print(f"\nTipp: mit --apply werden die {len([p for p in plan if p['action'] == 'add'])} "
-                  "neuen Deployments in config.yaml geschrieben.")
+            print(f"\nTip: with --apply, the {len([p for p in plan if p['action'] == 'add'])} "
+                  "new deployment(s) will be written to config.yaml.")
         if plan:
-            print("\n  Diff-Vorschau:")
+            print("\n  Diff preview:")
             print(render_plan_diff(plan))
     return 0
 

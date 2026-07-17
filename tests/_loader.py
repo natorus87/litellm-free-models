@@ -1,7 +1,7 @@
 """
-Loader fuer die Skripte (render-config.py, find-shared-models.py),
-die nicht als Module geschrieben sind (haben keinen if __name__ == '__main__'
-innerhalb einer Klasse/Function-Wrapper).
+Loader for the scripts (render-config.py, find-shared-models.py) that
+aren't written as modules (they have no if __name__ == '__main__' inside
+a class/function wrapper).
 """
 from __future__ import annotations
 
@@ -13,7 +13,7 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 
 
 def load_script(name: str):
-    """Laedt ein Skript aus dem Repo-Root als importierbares Modul."""
+    """Loads a script from the repo root as an importable module."""
     path = REPO_ROOT / name
     if not path.exists():
         raise FileNotFoundError(path)

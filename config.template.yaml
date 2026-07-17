@@ -1,18 +1,19 @@
 # =============================================================================
 # LiteLLM Proxy Configuration – Free Models Only (TEMPLATE)
 # =============================================================================
-# DIESE DATEI IST DIE SINGLE SOURCE OF TRUTH.
+# THIS FILE IS THE SINGLE SOURCE OF TRUTH.
 #
-# Sie wird zur Laufzeit via `render-config.py` (im Repo-Root) in
-# `config.yaml` ueberfuehrt. Direkte Edits an `config.yaml` werden beim
-# naechsten Render ueberschrieben.
+# It gets rendered at runtime via `render-config.py` (in the repo root)
+# into `config.yaml`. Direct edits to `config.yaml` are overwritten on the
+# next render.
 #
-# Platzhalter-Syntax: {{ENV_VAR}} wird durch den Wert der entsprechenden
-# Variable in `.env` ersetzt. Fehlt die Variable, wird der Block dieses
-# Providers komplett aus `config.yaml` entfernt (ausser bei OVHcloud, das
-# anonymen Free-Tier ohne Key unterstuetzt -- dort wird "" eingesetzt).
+# Placeholder syntax: {{ENV_VAR}} is replaced with the value of the
+# corresponding variable in `.env`. If the variable is missing, that
+# provider's block is removed entirely from `config.yaml` (except for
+# OVHcloud, which supports an anonymous free tier without a key -- there
+# "" is substituted).
 #
-# Aggregates 24+ open-source & commercial LLM models across 12 free
+# Aggregates 36 open-source & commercial LLM models across 13 free
 # providers (OpenRouter, Cerebras, Groq, Cloudflare Workers AI, Google AI
 # Studio, NVIDIA NIM, Mistral La Plateforme, Cohere, GitHub Models,
 # OpenCode Zen, LLM7.io, HuggingFace Inference API, OVHcloud)
@@ -163,8 +164,8 @@ model_list:
 
   - model_name: llama-3.3-70b-instruct
     litellm_params:
-      # OVHcloud-ID nutzt Unterstrich (Meta-Llama-3_3-...), nicht Punkt —
-      # von der Stale-Deployment-Erkennung gegen den Live-Katalog verifiziert.
+      # OVHcloud's ID uses an underscore (Meta-Llama-3_3-...), not a dot —
+      # verified against the live catalog by the stale-deployment detection.
       model: openai/Meta-Llama-3_3-70B-Instruct
       api_key: {{OVHCLOUD_API_KEY}}
       api_base: https://oai.endpoints.kepler.ai.cloud.ovh.net/v1
@@ -1009,9 +1010,9 @@ model_list:
   # ===========================================================================
   # openrouter-free  –  OpenRouter Free Models Router
   # ===========================================================================
-  # Wählt automatisch ein passendes Free-Modell aus OpenRouter aus.
-  # Nützlich als Catch-All-Fallback oder wenn der Client kein spezifisches
-  # Modell braucht.
+  # Automatically picks a suitable free model from OpenRouter.
+  # Useful as a catch-all fallback, or when the client doesn't need a
+  # specific model.
   - model_name: openrouter-free
     litellm_params:
       model: openrouter/openrouter/free
@@ -1421,15 +1422,15 @@ model_list:
 # Router Settings  –  Load Balancing, Fallback & Cooldown
 # =============================================================================
 router_settings:
-  # usage-based-routing-v2 routet auf Deployments, die noch tpm/rpm-Budget
-  # haben (Werte aus litellm_params.tpm/rpm der model_list) – statt wie
-  # simple-shuffle ein rpm:1-Deployment (OpenRouter) genauso oft zu treffen
-  # wie ein rpm:40-Deployment (LLM7/NVIDIA). Mit Redis (Block unten) wird
-  # der Verbrauch instanzuebergreifend getrackt (Master + Slaves + Replicas)
-  # inkl. geteilter Cooldowns; ohne Redis faellt LiteLLM auf
-  # In-Memory-Tracking pro Instanz zurueck.
+  # usage-based-routing-v2 routes to deployments that still have tpm/rpm
+  # budget (values from litellm_params.tpm/rpm in model_list) -- instead of
+  # simple-shuffle hitting an rpm:1 deployment (OpenRouter) just as often
+  # as an rpm:40 deployment (LLM7/NVIDIA). With Redis (block below), usage
+  # is tracked across instances (master + slaves + replicas) including
+  # shared cooldowns; without Redis, LiteLLM falls back to in-memory
+  # tracking per instance.
   routing_strategy: usage-based-routing-v2
-  # BEGIN REDIS ROUTER (von render-config.py entfernt, wenn REDIS_HOST fehlt)
+  # BEGIN REDIS ROUTER (removed by render-config.py when REDIS_HOST is missing)
   redis_host: os.environ/REDIS_HOST
   redis_port: os.environ/REDIS_PORT
   redis_password: os.environ/REDIS_PASSWORD
@@ -1484,16 +1485,16 @@ litellm_settings:
   num_retries: 2
 
   # BEGIN REDIS CACHE
-  # ─── Redis-Cache ──────────────────────────────────────────────────────────
+  # ─── Redis Cache ──────────────────────────────────────────────────────────
   # Shared cache between master + all slaves. Reduces latency and rate-limit
   # pressure on upstream providers (identical prompts get served from cache).
   #
-  # ⚠️ SEMANTIK-HINWEIS (bewusste Entscheidung, siehe README "Response-Cache"):
-  # Identische Requests (model, messages, temperature, ... werden gehasht)
-  # liefern innerhalb der TTL die byte-identische gecachte Antwort – auch bei
-  # temperature > 0. Opt-out pro Request via LiteLLM-Extension:
-  #   {"cache": {"no-cache": true}}  bzw. Header  Cache-Control: no-cache
-  # Deshalb ist die TTL bewusst kurz (5 min) gewaehlt.
+  # ⚠️ SEMANTICS NOTE (deliberate decision, see the README's "Response Cache"):
+  # Identical requests (model, messages, temperature, ... get hashed) return
+  # the byte-identical cached answer within the TTL -- even with
+  # temperature > 0. Per-request opt-out via a LiteLLM extension:
+  #   {"cache": {"no-cache": true}}  or the  Cache-Control: no-cache  header
+  # That's why the TTL is deliberately short (5 min).
   #
   # The `os.environ/...` syntax is resolved by LiteLLM at *runtime* from the
   # process environment, so the same rendered config.yaml works in Docker
@@ -1503,9 +1504,9 @@ litellm_settings:
   # so multi-replica/multi-instance deployments share auth state and do
   # not hammer Postgres on every request.
   #
-  # Der gesamte Block wird von render-config.py entfernt, wenn REDIS_HOST
-  # in .env fehlt/leer ist (oder mit --no-redis gerendert wird) – der Proxy
-  # laeuft dann ohne Cache, statt gegen ein unerreichbares Redis zu laufen.
+  # The entire block is removed by render-config.py when REDIS_HOST is
+  # missing/empty in .env (or rendered with --no-redis) -- the proxy then
+  # runs without a cache instead of running against an unreachable Redis.
   cache: true
   enable_redis_auth_cache: true
   cache_params:
@@ -1514,13 +1515,13 @@ litellm_settings:
     port: os.environ/REDIS_PORT
     password: os.environ/REDIS_PASSWORD
     namespace: "litellm.cache"
-    # Response-Cache: 5 min in Redis
+    # Response cache: 5 min in Redis
     ttl: 300
-    # In-Memory-Tier: 1 min
+    # In-memory tier: 1 min
     default_in_memory_ttl: 60
     max_connections: 50
-    # Nur Chat-Call-Types: alle Deployments sind mode: chat
-    # (aembedding/atranscription waeren tote Eintraege).
+    # Chat call types only: all deployments are mode: chat
+    # (aembedding/atranscription would be dead entries).
     supported_call_types:
       - "acompletion"
       - "atext_completion"

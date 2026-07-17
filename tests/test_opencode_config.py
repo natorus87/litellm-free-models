@@ -1,4 +1,4 @@
-"""Tests fuer opencode-config.py (nur reine Helfer, kein Netzwerk/Home-Zugriff)."""
+"""Tests for opencode-config.py (pure helpers only, no network/home access)."""
 import json
 import tempfile
 import unittest
@@ -19,10 +19,10 @@ class TestBuildProviderBlock(unittest.TestCase):
             timeout_ms=900_000,
             chunk_timeout_ms=120_000,
         )
-        # apiKey/baseURL/timeout/chunkTimeout MUESSEN in "options" liegen
-        # (offizielles Schema: https://opencode.ai/config.json ->
-        # $defs.ProviderConfig, additionalProperties: false auf oberster
-        # Ebene -- apiKey dort waere schema-ungueltig).
+        # apiKey/baseURL/timeout/chunkTimeout MUST live under "options"
+        # (official schema: https://opencode.ai/config.json ->
+        # $defs.ProviderConfig, additionalProperties: false at the top
+        # level -- apiKey there would be schema-invalid).
         self.assertEqual(set(block.keys()), {"npm", "name", "options", "models"})
         self.assertEqual(
             set(block["options"].keys()),
@@ -82,13 +82,13 @@ class TestPruneBackups(unittest.TestCase):
             oc.prune_backups(target, keep=3)
             remaining = sorted((Path(d)).glob("opencode.json.bak.*"))
             self.assertEqual(len(remaining), 3)
-            # Die NEUESTEN (hoechste Timestamps) bleiben erhalten
+            # The NEWEST (highest timestamps) are kept
             self.assertTrue(remaining[-1].name.endswith("0000000009"))
 
 
 class TestMergeBehavior(unittest.TestCase):
-    """End-to-end (kein Netzwerk): main() mit --dry-run darf niemals in die
-    Zieldatei schreiben und muss andere Provider unangetastet lassen."""
+    """End-to-end (no network): main() with --dry-run must never write to
+    the target file and must leave other providers untouched."""
 
     def test_dry_run_does_not_write(self):
         import sys
@@ -117,7 +117,7 @@ class TestMergeBehavior(unittest.TestCase):
             with mock.patch.object(sys, "argv", argv):
                 rc = oc.main()
             self.assertEqual(rc, 0)
-            self.assertEqual(out.read_text(), before)  # unveraendert
+            self.assertEqual(out.read_text(), before)  # unchanged
 
 
 if __name__ == "__main__":

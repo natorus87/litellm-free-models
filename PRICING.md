@@ -1,8 +1,8 @@
 # PRICING.md — LiteLLM Free-Models Proxy Cost Information
 
-> **Stand: 2026-06-14** — 13 Provider (inkl. OVHcloud anonymer Free-Tier).
-> Preisdaten aus `model_prices_and_context_window.json`
-> (LiteLLM-Referenz-DB, identisch mit `https://models.litellm.ai/`).
+> **As of: 2026-06-14** — 13 providers (incl. OVHcloud anonymous free tier).
+> Pricing data from `model_prices_and_context_window.json`
+> (LiteLLM reference DB, identical to `https://models.litellm.ai/`).
 
 This document provides average pricing information for the 13 free-tier LLM API providers used by the LiteLLM Free-Models Proxy. All prices are in USD per 1 million tokens (input + output) unless otherwise noted.
 
@@ -136,16 +136,16 @@ Prices are based on public information as of June 2026 and are subject to change
 ### OVHcloud AI Endpoints
 - **Free Tier**: **Anonymous** — no API key required, 2 RPM per IP per model
 - **API**: OpenAI-compatible at https://oai.endpoints.kepler.ai.cloud.ovh.net/v1
-- **Pricing (hypothetical paid, falls Free-Tier wegfällt)**: GPT-OSS-120B: $0.08/$0.40 per 1M
-- **Models** (Auswahl):
+- **Pricing (hypothetical paid, if the free tier goes away)**: GPT-OSS-120B: $0.08/$0.40 per 1M
+- **Models** (selection):
   - gpt-oss-120b
   - gpt-oss-20b
   - Meta-Llama-3_3-70B-Instruct
   - Llama-3.1-8B-Instruct
   - Mistral-Small-3.2-24B-Instruct-2506
   - Qwen3-32B, Qwen3.5-9B, Qwen3-Coder-30B-A3B-Instruct
-  - Whisper, Stable Diffusion XL, Embedding-Modelle
-- **Besonderheit**: `api_key: ""` in `config.yaml` — funktioniert ohne Auth-Header. IP-basiertes Rate-Limit, problematisch in Multi-Instance-Setups.
+  - Whisper, Stable Diffusion XL, embedding models
+- **Note**: `api_key: ""` in `config.yaml` — works without an auth header. IP-based rate limit, problematic in multi-instance setups.
 
 ---
 

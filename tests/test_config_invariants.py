@@ -1,9 +1,9 @@
 """
-Strukturelle Invarianten-Tests fuer config.template.yaml.
+Structural invariant tests for config.template.yaml.
 
-Diese Tests fangen genau die Fehlerklassen, die im Juli-2026-Review am
-haeufigsten auftraten: Fallbacks auf entfernte Modelle, Verletzungen der
->= 2-Provider-Regel und Doku-Drift durch handgepflegte Zahlen.
+These tests catch exactly the error classes that came up most often in
+the July-2026 review: fallbacks to removed models, violations of the
+>= 2-provider rule, and doc drift from hand-maintained numbers.
 """
 import re
 import unittest
@@ -15,8 +15,8 @@ rc = load_script("render-config.py")
 
 TEMPLATE = REPO_ROOT / "config.template.yaml"
 
-# Dokumentierte Ausnahmen der >= 2-Provider-Regel — Single Source ist
-# render-config.py (dort auch fuer die Single-Deployment-Warnung genutzt).
+# Documented exceptions to the >= 2-provider rule — single source is
+# render-config.py (also used there for the single-deployment warning).
 SINGLE_PROVIDER_ALLOWED = rc.SINGLE_PROVIDER_ALLOWED
 
 
@@ -27,7 +27,7 @@ def _parse_template():
 
 
 def _extract_chains(lines, section):
-    """Liefert {key: [targets]} fuer 'fallbacks' oder 'context_window_fallbacks'."""
+    """Returns {key: [targets]} for 'fallbacks' or 'context_window_fallbacks'."""
     chains = {}
     in_section = False
     for line in lines:
@@ -47,8 +47,8 @@ def _extract_chains(lines, section):
 
 
 class TestFallbackTargetsExist(unittest.TestCase):
-    """Jedes Fallback-Ziel (und jeder Key ausser '*') muss ein model_name
-    der model_list sein."""
+    """Every fallback target (and every key except '*') must be a
+    model_name from model_list."""
 
     def setUp(self):
         self.lines, blocks = _parse_template()
@@ -56,15 +56,15 @@ class TestFallbackTargetsExist(unittest.TestCase):
 
     def _check(self, section):
         chains = _extract_chains(self.lines, section)
-        self.assertTrue(chains, f"keine {section}-Eintraege gefunden")
+        self.assertTrue(chains, f"no {section} entries found")
         for key, targets in chains.items():
             if key != "*":
                 self.assertIn(key, self.model_names,
-                              f"{section}-Key '{key}' existiert nicht in model_list")
+                              f"{section} key '{key}' does not exist in model_list")
             for t in targets:
                 self.assertIn(t, self.model_names,
-                              f"{section}-Ziel '{t}' (Chain '{key}') existiert "
-                              f"nicht in model_list")
+                              f"{section} target '{t}' (chain '{key}') does not "
+                              f"exist in model_list")
 
     def test_fallback_targets(self):
         self._check("fallbacks")
@@ -74,7 +74,7 @@ class TestFallbackTargetsExist(unittest.TestCase):
 
 
 class TestTwoProviderRule(unittest.TestCase):
-    """Jedes model_name (ausser dokumentierte Ausnahmen) hat >= 2 Deployments."""
+    """Every model_name (except documented exceptions) has >= 2 deployments."""
 
     def test_min_two_deployments(self):
         _, blocks = _parse_template()
@@ -86,41 +86,41 @@ class TestTwoProviderRule(unittest.TestCase):
                 continue
             self.assertGreaterEqual(
                 n, 2,
-                f"'{mn}' hat nur {n} Deployment(s); Regel: >= 2 Provider "
-                f"(Ausnahmen: {sorted(SINGLE_PROVIDER_ALLOWED)})")
+                f"'{mn}' has only {n} deployment(s); rule: >= 2 providers "
+                f"(exceptions: {sorted(SINGLE_PROVIDER_ALLOWED)})")
 
 
 class TestTpmRpmInLitellmParams(unittest.TestCase):
-    """tpm/rpm muessen in litellm_params liegen (usage-based-routing-v2
-    wertet nur dort aus), nicht auf Deployment-Top-Level."""
+    """tpm/rpm must live in litellm_params (usage-based-routing-v2 only
+    evaluates it there), not at the deployment top level."""
 
     def test_no_top_level_tpm_rpm(self):
         text = TEMPLATE.read_text(encoding="utf-8")
         offenders = re.findall(r"^    (tpm|rpm):.*$", text, flags=re.MULTILINE)
         self.assertEqual(offenders, [],
-                         "tpm/rpm auf Deployment-Top-Level gefunden – gehoert "
-                         "nach litellm_params (6-Space-Indent)")
+                         "tpm/rpm found at deployment top level – belongs "
+                         "under litellm_params (6-space indent)")
 
     def test_every_deployment_has_rpm(self):
         _, blocks = _parse_template()
         for b in blocks:
             block_text = "".join(b["lines"])
             self.assertIn("      rpm:", block_text,
-                          f"Deployment '{b['model_name']}' ({b['model_id']}) "
-                          f"hat kein rpm in litellm_params")
+                          f"deployment '{b['model_name']}' ({b['model_id']}) "
+                          f"has no rpm in litellm_params")
 
 
 class TestSingleDeploymentWarnings(unittest.TestCase):
-    """Nach dem Provider-Filter soll der Renderer warnen, wenn ein
-    model_name nur noch 1 Deployment hat (Ausnahmen ausgenommen)."""
+    """After the provider filter, the renderer should warn if a
+    model_name has only 1 deployment left (exceptions excluded)."""
 
     def test_detects_single_deployment_models(self):
         kept = [
             {"model_name": "gpt-oss-120b"},
             {"model_name": "gpt-oss-120b"},
-            {"model_name": "mistral-large"},          # nur 1 -> Warnung
-            {"model_name": "big-pickle"},             # Ausnahme -> keine Warnung
-            {"model_name": "openrouter-free"},        # Ausnahme -> keine Warnung
+            {"model_name": "mistral-large"},          # only 1 -> warning
+            {"model_name": "big-pickle"},             # exception -> no warning
+            {"model_name": "openrouter-free"},        # exception -> no warning
         ]
         self.assertEqual(rc.single_deployment_warnings(kept), ["mistral-large"])
 
@@ -133,21 +133,21 @@ class TestSingleDeploymentWarnings(unittest.TestCase):
 
 
 class TestRedisMarkers(unittest.TestCase):
-    """Die # BEGIN/END REDIS-Marker muessen paarweise vorhanden sein,
-    sonst kann render-config.py die Bloecke nicht konditional entfernen."""
+    """The # BEGIN/END REDIS markers must appear in pairs, otherwise
+    render-config.py cannot conditionally remove the blocks."""
 
     def test_markers_balanced(self):
         text = TEMPLATE.read_text(encoding="utf-8")
         begins = re.findall(r"^\s*# BEGIN REDIS", text, flags=re.MULTILINE)
         ends = re.findall(r"^\s*# END REDIS", text, flags=re.MULTILINE)
         self.assertEqual(len(begins), len(ends),
-                         "BEGIN/END REDIS-Marker unbalanciert")
+                         "BEGIN/END REDIS markers unbalanced")
         self.assertGreaterEqual(len(begins), 2,
-                                "Erwartet: Cache-Block + Router-Block markiert")
+                                "expected: cache block + router block marked")
 
 
 class TestRenderWithoutRedis(unittest.TestCase):
-    """Ein Render ohne REDIS_HOST darf keine Redis-Referenzen enthalten."""
+    """A render without REDIS_HOST must not contain any Redis references."""
 
     def test_no_redis_render(self):
         import tempfile
@@ -185,14 +185,14 @@ class TestRenderWithoutRedis(unittest.TestCase):
 
 
 class TestRenderedFallbackTargets(unittest.TestCase):
-    """Nach einem Render mit wenigen Keys duerfen Fallback-Chains keine
-    Ziele enthalten, deren Deployments komplett entfernt wurden."""
+    """After a render with few keys, fallback chains must not contain
+    targets whose deployments were removed entirely."""
 
     def test_targets_filtered_after_provider_removal(self):
         import tempfile
         with tempfile.TemporaryDirectory() as d:
             env = Path(d) / ".env"
-            # Nur Mistral + Cohere: viele model_names fallen weg
+            # Only Mistral + Cohere: many model_names drop out
             env.write_text(
                 "LITELLM_MASTER_KEY=sk-test\n"
                 "MISTRAL_API_KEY=m-test\n"
@@ -209,8 +209,8 @@ class TestRenderedFallbackTargets(unittest.TestCase):
                     for t in targets:
                         self.assertIn(
                             t, valid,
-                            f"Render liess verwaistes {section}-Ziel '{t}' "
-                            f"in Chain '{key}' stehen")
+                            f"render left an orphaned {section} target '{t}' "
+                            f"in chain '{key}'")
 
 
 if __name__ == "__main__":

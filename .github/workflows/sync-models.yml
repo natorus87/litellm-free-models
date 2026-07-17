@@ -1,19 +1,19 @@
 # =============================================================================
-# Sync Free Models – wöchentliche PR-Pipeline
+# Sync Free Models – weekly PR pipeline
 # =============================================================================
-# Fragt die Provider-Kataloge ab, wendet erkannte Ergänzungen via
-# `find-shared-models.py --apply` auf config.template.yaml an, regeneriert
-# config.yaml + multi-instance-Configs + Doku-Matrix und öffnet einen PR.
+# Queries the provider catalogs, applies detected additions via
+# `find-shared-models.py --apply` to config.template.yaml, regenerates
+# config.yaml + multi-instance configs + docs matrix, and opens a PR.
 #
-# - Läuft NUR mit Provider-Keys aus GitHub Secrets (separate, least-privilege
-#   Free-Tier-Keys nur für die read-only Katalog-Abfragen verwenden!).
-#   Ohne Keys schlägt der Run laut fehl, statt still einen lückenhaften
-#   Report zu erzeugen.
-# - Kein Auto-Merge: Modell-Änderungen betreffen Routing/Fallbacks und
-#   brauchen einen menschlichen Blick.
-# - Konservativ bei Entfernungen: --apply fügt nur hinzu bzw. aktualisiert
-#   Kosten; Modell-ENTFERNUNGEN bleiben bewusst manuell (Kataloge flappen
-#   wochenweise, vgl. gemma-3-12b-it-Historie).
+# - Runs ONLY with provider keys from GitHub Secrets (use separate,
+#   least-privilege free-tier keys just for the read-only catalog queries!).
+#   Without keys, the run fails loudly instead of silently producing an
+#   incomplete report.
+# - No auto-merge: model changes affect routing/fallbacks and need a
+#   human look.
+# - Conservative about removals: --apply only adds / updates costs;
+#   model REMOVALS stay deliberately manual (catalogs flap week to
+#   week, cf. the gemma-3-12b-it history).
 # =============================================================================
 name: Sync Free Models (weekly PR)
 
@@ -77,16 +77,16 @@ jobs:
             [ -n "$HF_TOKEN" ]             && echo "HF_TOKEN=$HF_TOKEN"
             true
           } > .env
-          # llm7io/huggingface/ovhcloud laufen auch ohne Key – aber ohne
-          # jegliche Provider-Secrets ist der Report systematisch
-          # unvollstaendig. Dann lieber laut fehlschlagen (V11).
+          # llm7io/huggingface/ovhcloud also work without a key – but
+          # without any provider secrets at all, the report is
+          # systematically incomplete. Fail loudly instead (V11).
           key_count=$(grep -cE '_API_KEY=|_TOKEN=' .env || true)
           if [ "$key_count" -lt 3 ]; then
-            echo "::error::Zu wenige Provider-Keys als SYNC_*-Secrets hinterlegt ($key_count gefunden)."
-            echo "::error::Ohne Keys ist der Katalog-Abgleich systematisch unvollstaendig – Secrets anlegen (siehe Workflow-Header)."
+            echo "::error::Too few provider keys configured as SYNC_* secrets ($key_count found)."
+            echo "::error::Without keys, the catalog sync is systematically incomplete – create the secrets (see workflow header)."
             exit 1
           fi
-          echo "$key_count Provider-Keys konfiguriert."
+          echo "$key_count provider keys configured."
 
       - name: Run catalog sync (--apply + regen)
         run: |
@@ -95,7 +95,7 @@ jobs:
       - name: Regenerate docs matrix
         run: python3 find-shared-models.py --write-docs
 
-      # ── Gates: nur ein grüner Stand erreicht den Reviewer ──────────────────
+      # ── Gates: only a green run reaches the reviewer ──────────────────────
       - name: Gate – lint
         run: |
           pip install ruff
@@ -120,22 +120,22 @@ jobs:
       - name: Prepare PR body
         run: |
           {
-            echo "Wöchentlicher Provider-Katalog-Sync (\`find-shared-models.py --apply\`)."
+            echo "Weekly provider catalog sync (\`find-shared-models.py --apply\`)."
             echo
-            echo "- ✅ Gates: ruff, Unit-/Invarianten-Tests, Render-Smoke, kubeconform"
-            echo "- ⚠️ Kein Auto-Merge – Routing-/Fallback-Änderungen bitte reviewen."
-            echo "- ℹ️ \`--apply\` fügt nur hinzu / aktualisiert Kosten. Modell-Entfernungen"
-            echo "  bleiben manuell (Flapping-Schutz)."
+            echo "- ✅ Gates: ruff, unit/invariant tests, render smoke test, kubeconform"
+            echo "- ⚠️ No auto-merge – please review routing/fallback changes."
+            echo "- ℹ️ \`--apply\` only adds / updates costs. Model removals"
+            echo "  stay manual (flapping protection)."
             echo
-            echo "<details><summary>providers-overlap.txt (gekürzt)</summary>"
+            echo "<details><summary>providers-overlap.txt (truncated)</summary>"
             echo
             echo '```'
-            head -c 60000 providers-overlap.txt || echo "(kein Report erzeugt)"
+            head -c 60000 providers-overlap.txt || echo "(no report generated)"
             echo '```'
             echo "</details>"
           } > /tmp/pr-body.md
 
-      # Generierte/lokale Dateien nicht in den PR aufnehmen
+      # Don't include generated/local files in the PR
       - name: Clean workspace for PR
         run: |
           rm -f .env config.check.yaml providers-overlap.txt
@@ -153,8 +153,8 @@ jobs:
           labels: |
             dependencies
             models-sync
-          # NUR Template + Doku: config.yaml und die multi-instance-Outputs
-          # sind generiert, gitignored und enthalten eingesetzte API-Keys.
+          # Template + docs ONLY: config.yaml and the multi-instance outputs
+          # are generated, gitignored, and contain substituted API keys.
           add-paths: |
             config.template.yaml
             AGENTS.md

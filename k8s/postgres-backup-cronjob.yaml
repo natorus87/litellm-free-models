@@ -1,14 +1,14 @@
 # =============================================================================
 # Postgres – Nightly Backup (pg_dump) CronJob
 # =============================================================================
-# Postgres ist der einzige persistente Zustand des Stacks (Virtual Keys,
-# Spend-Tracking, Team-/User-Zuordnungen). Ein kaputtes PVC ohne Backup
-# bedeutet: alle ausgegebenen API-Keys sind weg.
+# Postgres is the stack's only persistent state (virtual keys, spend
+# tracking, team/user mappings). A broken PVC without a backup means:
+# all issued API keys are gone.
 #
-# Dieser CronJob schreibt taeglich um 03:30 UTC einen pg_dump (custom format)
-# in ein separates PVC und behaelt die letzten 7 Dumps.
+# This CronJob writes a pg_dump (custom format) daily at 03:30 UTC into
+# a separate PVC and keeps the last 7 dumps.
 #
-# Restore (siehe auch README "Backup & Restore"):
+# Restore (see also the README "Backup & Restore" section):
 #   kubectl -n litellm-free-models run pg-restore --rm -it --restart=Never \
 #     --image=postgres:16-alpine --overrides='...' -- \
 #     pg_restore -h postgres -U litellm -d litellm --clean /backups/<dump>
@@ -34,8 +34,8 @@ spec:
           labels:
             app: postgres-backup
             app.kubernetes.io/name: litellm-free-models
-            # component "proxy"-aehnlich benannt, damit die NetworkPolicy
-            # postgres-only-from-litellm den Zugriff auf Postgres erlaubt
+            # component named like "proxy" so the postgres-only-from-litellm
+            # NetworkPolicy allows access to Postgres
             app.kubernetes.io/component: proxy
         spec:
           restartPolicy: OnFailure
@@ -63,10 +63,10 @@ spec:
                   ts=$(date +%Y%m%d-%H%M%S)
                   pg_dump -h postgres -U litellm -d litellm -F c \
                     -f "/backups/litellm-${ts}.dump"
-                  echo "Backup geschrieben: litellm-${ts}.dump"
-                  # Nur die letzten 7 Dumps behalten
+                  echo "Backup written: litellm-${ts}.dump"
+                  # Keep only the last 7 dumps
                   ls -1t /backups/litellm-*.dump | tail -n +8 | xargs -r rm -f --
-                  echo "Vorhandene Backups:"; ls -lh /backups/
+                  echo "Existing backups:"; ls -lh /backups/
               securityContext:
                 allowPrivilegeEscalation: false
                 capabilities:

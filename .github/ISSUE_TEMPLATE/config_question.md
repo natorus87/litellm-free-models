@@ -6,21 +6,21 @@ labels: question
 assignees: ""
 ---
 
-## Frage
+## Question
 
-Was möchtest du konfigurieren? Was hast du bereits versucht?
+What do you want to configure? What have you already tried?
 
 ## Setup
 
-- [ ] Single-Instance (Docker Compose)
-- [ ] Single-Instance (Kubernetes)
-- [ ] Multi-Instance (Docker Compose)
-- [ ] Multi-Instance (Kubernetes)
-- [ ] Bare-Metal (`python3 render-config.py && litellm --config config.yaml`)
+- [ ] Single instance (Docker Compose)
+- [ ] Single instance (Kubernetes)
+- [ ] Multi-instance (Docker Compose)
+- [ ] Multi-instance (Kubernetes)
+- [ ] Bare metal (`python3 render-config.py && litellm --config config.yaml`)
 
-## `.env`-Status
+## `.env` State
 
-Welche API-Keys sind gesetzt? (Namen reichen — **keine Werte posten!**)
+Which API keys are set? (names are enough — **never post values!**)
 
 - [ ] `OPENROUTER_API_KEY`
 - [ ] `CEREBRAS_API_KEY`
@@ -36,14 +36,14 @@ Welche API-Keys sind gesetzt? (Namen reichen — **keine Werte posten!**)
 - [ ] `HF_TOKEN`
 - [ ] `OVHCLOUD_API_KEY` (optional)
 
-## Render-Output
+## Render Output
 
-Output von `python3 render-config.py 2>&1 | head -50`:
+Output of `python3 render-config.py 2>&1 | head -50`:
 
 ```
-(hier einfügen)
+(paste here)
 ```
 
-## Fehlermeldung
+## Error Message
 
-Falls vorhanden, die exakte Fehlermeldung (Logs, Traceback, etc.).
+If applicable, the exact error message (logs, traceback, etc.).

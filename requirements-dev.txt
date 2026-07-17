@@ -1,3 +1,3 @@
-# Wird nur für Development benötigt. Haupt-Skripte haben KEINE externen Dependencies.
+# Only needed for development. The main scripts have NO external dependencies.
 ruff==0.6.9
 pre-commit==3.8.0

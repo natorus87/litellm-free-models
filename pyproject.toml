@@ -20,8 +20,8 @@ extend-exclude = [
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "N", "UP"]
-# W503 (flake8) existiert in ruff nicht und liess ruff am Config-Parsing
-# scheitern – nicht wieder aufnehmen.
+# W503 (flake8) doesn't exist in ruff and used to make ruff fail at
+# config parsing – don't re-add it.
 ignore = [
     "E501",
     "E402",

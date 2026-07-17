@@ -17,8 +17,8 @@ repos:
     rev: v0.6.9
     hooks:
       - id: ruff
-        # Ignore-Regeln zentral in pyproject.toml ([tool.ruff.lint]) –
-        # W503 existiert in ruff nicht und liess den Hook frueher crashen.
+        # Ignore rules are centralized in pyproject.toml ([tool.ruff.lint]) –
+        # W503 doesn't exist in ruff and used to crash the hook.
         args: ["--fix"]
       - id: ruff-format
 

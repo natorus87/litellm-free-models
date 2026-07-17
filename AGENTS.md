@@ -1,24 +1,24 @@
 # AGENTS.md — LiteLLM Free-Models Proxy
 
-> **Stand: 2026-07-16** — Komplett-Abarbeitung des Code-Reviews vom 06.07.
-> (PLAN.md): Passwort-Flow (Compose + K8s-Secrets aus .env), konditionaler
-> Redis-Render, `usage-based-routing-v2` mit Redis-Tracking, Manifest-Dedup
-> (`k8s/redis/`-Base), CI mit blockierendem Lint + Invarianten-Tests +
-> Manifest-Validierung, Sync-Workflow als PR-Pipeline, generierte
-> Deployment-Matrix, Postgres-Backup, Image-Pinning, securityContext +
+> **As of: 2026-07-16** — Full resolution of the 2026-07-06 code review
+> (PLAN.md): password flow (Compose + K8s secrets from .env), conditional
+> Redis rendering, `usage-based-routing-v2` with Redis tracking, manifest
+> dedup (`k8s/redis/` base), CI with blocking lint + invariant tests +
+> manifest validation, sync workflow as a PR pipeline, generated
+> deployment matrix, Postgres backup, image pinning, securityContext +
 > NetworkPolicy.
 
-## Kurzbeschreibung
+## Short Description
 
-LiteLLM-Proxy, der **ausschließlich kostenlose LLM-APIs** von 13 Providern aggregiert, mit rate-limit-bewusstem Load-Balancing (`usage-based-routing-v2`), Cooldowns und Fallback-Chains. Gleiche Modelle (z.B. `gpt-oss-120b`) sind über mehrere Anbieter gedeckt, um Rate-Limits zu umgehen.
+LiteLLM proxy that aggregates **exclusively free LLM APIs** from 13 providers, with rate-limit-aware load balancing (`usage-based-routing-v2`), cooldowns, and fallback chains. The same models (e.g. `gpt-oss-120b`) are covered by multiple providers to work around rate limits.
 
 **Repo**: `/home/sb/github/litellm-free-models`
 
 ---
 
-## 1. Architektur
+## 1. Architecture
 
-### Single-Instance (Hauptsetup)
+### Single Instance (main setup)
 
 ```
 Client ──► LiteLLM Proxy (:4000)
@@ -27,7 +27,7 @@ Client ──► LiteLLM Proxy (:4000)
               ├─► Cerebras (30 RPM)
               ├─► Groq (2-30 RPM)
               ├─► Cloudflare Workers AI (10 RPM)
-              ├─► Google AI Studio (2 RPM, derzeit ohne aktives Deployment)
+              ├─► Google AI Studio (2 RPM, currently no active deployment)
               ├─► NVIDIA NIM (40 RPM)
               ├─► Mistral La Plateforme (2 RPM)
               ├─► Cohere (20 RPM)
@@ -35,34 +35,34 @@ Client ──► LiteLLM Proxy (:4000)
               ├─► OpenCode Zen (10 RPM)
               ├─► LLM7.io (40 RPM)
               ├─► HuggingFace Inference API (30 RPM)
-              └─► OVHcloud (2 RPM, **kein Key nötig**)
+              └─► OVHcloud (2 RPM, **no key needed**)
 ```
 
-### Multi-Instance (Erweiterung in `multi-instance/`)
+### Multi-Instance (extension in `multi-instance/`)
 
 ```
-Client ──► MASTER (:4000, eigene Keys + Slave-Routing)
+Client ──► MASTER (:4000, own keys + slave routing)
               │
-              ├─► Direkte Provider (eigene API-Keys)
-              ├─► Slave 1 (:4001, andere API-Keys)
-              └─► Slave 2 (:4002, andere API-Keys)
+              ├─► Direct providers (own API keys)
+              ├─► Slave 1 (:4001, other API keys)
+              └─► Slave 2 (:4002, other API keys)
 ```
 
-Master: 99 direkte + 72 Slave-Deployments = **171 Deployments** (36 model_names × 2 Slaves zusätzlich). Slaves nutzen die base `config.yaml` per Docker-Volume-Mount.
+Master: 99 direct + 72 slave deployments = **171 deployments** (36 model_names × 2 additional slaves). Slaves reuse the base `config.yaml` via a Docker volume mount.
 
-**Positionierung (bewusste Entscheidung):** Multi-Key-Deployments in EINER Instanz haben denselben 3×-Effekt ohne den Overhead. Das Master/Slave-Setup ist nur für **getrennte Hosts/Egress-IPs** positioniert (IP-basierte Limits wie OVHcloud) — siehe README-Abschnitt "Multi-Instance".
+**Positioning (deliberate decision):** Multi-key deployments in ONE instance have the same 3× effect without the overhead. The master/slave setup is positioned only for **separate hosts/egress IPs** (IP-based limits like OVHcloud) — see the README section "Multi-Instance".
 
 ---
 
-## 2. Provider & API-Keys
+## 2. Providers & API Keys
 
-| # | Provider | API-Format | Env-Var | RPM (Free) |
+| # | Provider | API Format | Env-Var | RPM (Free) |
 |---|---|---|---|---|
 | 1 | [OpenRouter](https://openrouter.ai) | openrouter/ | `OPENROUTER_API_KEY` | 1 |
 | 2 | [Cerebras](https://cerebras.ai) | cerebras/ | `CEREBRAS_API_KEY` | 30 |
 | 3 | [Groq](https://groq.com) | groq/ | `GROQ_API_KEY` | 2-30 |
 | 4 | [Cloudflare Workers AI](https://workers.ai) | cloudflare/ | `CLOUDFLARE_API_KEY` + `CLOUDFLARE_API_BASE` | 10 |
-| 5 | [Google AI Studio](https://aistudio.google.com) | gemini/ | `GEMINI_API_KEY` (derzeit ungenutzt, für künftige Syncs) | 2 |
+| 5 | [Google AI Studio](https://aistudio.google.com) | gemini/ | `GEMINI_API_KEY` (currently unused, kept for future syncs) | 2 |
 | 6 | [NVIDIA NIM](https://build.nvidia.com) | openai/ (api_base) | `NVIDIA_API_KEY` | 40 |
 | 7 | [Mistral La Plateforme](https://console.mistral.ai) | mistral/ | `MISTRAL_API_KEY` | 2 |
 | 8 | [Cohere](https://cohere.com) | cohere/ | `COHERE_API_KEY` | 20 |
@@ -70,30 +70,30 @@ Master: 99 direkte + 72 Slave-Deployments = **171 Deployments** (36 model_names 
 | 10 | [OpenCode Zen](https://opencode.ai/zen) | openai/ (api_base) | `OPENCODE_ZEN_API_KEY` | 10 |
 | 11 | [LLM7.io](https://llm7.io/) | openai/ (api_base) | `LLM7IO_API_KEY` | 40 |
 | 12 | [HuggingFace Inference API](https://huggingface.co/) | huggingface/ | `HF_TOKEN` | 30 |
-| 13 | [OVHcloud AI Endpoints](https://www.ovhcloud.com/en/public-cloud/ai-endpoints/) | openai/ (api_base) | (kein Key, anonymer Free-Tier) | 2 |
+| 13 | [OVHcloud AI Endpoints](https://www.ovhcloud.com/en/public-cloud/ai-endpoints/) | openai/ (api_base) | (no key, anonymous free tier) | 2 |
 
-Vollständige Env-Var-Liste inkl. `REDIS_*`/`POSTGRES_*`: siehe `.env.example` (die Datei ist die Referenz, Zahlen hier werden nicht mehr von Hand gepflegt).
+Full env-var list including `REDIS_*`/`POSTGRES_*`: see `.env.example` (that file is the reference; numbers here are no longer hand-maintained).
 
-### Provider-Besonderheiten
+### Provider Specifics
 
-- **NVIDIA**: Deployment-Name = `openai/openai/<model>` → sendet `openai/<model>` an NVIDIA. Kimi läuft unter `moonshotai/kimi-k2-instruct` (anders als `kimi-k2.6` auf OpenRouter/Cloudflare).
-- **GitHub Models**: Endpoint `https://models.inference.ai.azure.com`, Modelle: `Meta-Llama-3.3-70B-Instruct`, `Mistral-large-2411`, `Cohere-command-r-plus-08-2024`.
-- **OpenCode Zen**: Endpoint `https://opencode.ai/zen/v1`, Modelle: `deepseek-v4-flash-free`, `nemotron-3-ultra-free`, `big-pickle`, `north-mini-code-free`.
-- **Cloudflare**: Model-Suffix `-fp8-fast` statt `-fp8` (getestet gegen API-Doku). `deepseek-v4-flash` existiert nicht bei Cloudflare.
-- **Cerebras**: `llama3.1-8b` wurde am 27.05.2026 deprecated.
-- **LLM7.io**: OpenAI-kompatibel an `https://api.llm7.io/v1`. Free-Tier: 2 RPM (40 RPM mit kostenlosem Token von token.llm7.io). `api_key: "unused"` für den Basis-Tier.
-- **HuggingFace**: Nutzt das `huggingface/`-Prefix von LiteLLM → routed zur HF Inference API. Rate-limited, keine Credit Card nötig.
-- **OVHcloud**: OpenAI-kompatibel an `https://oai.endpoints.kepler.ai.cloud.ovh.net/v1`. **Anonymer Free-Tier** ohne API-Key (2 RPM/IP/Modell). `api_key: ""` in `config.yaml`.
-- **Google AI Studio**: Derzeit **kein aktives Deployment** (gemma-3-Serie von Google eingestellt, Juni 2026). `GEMINI_API_KEY` bleibt für künftige Katalog-Syncs dokumentiert.
+- **NVIDIA**: deployment name = `openai/openai/<model>` → sends `openai/<model>` to NVIDIA. Kimi runs under `moonshotai/kimi-k2-instruct` (different from `kimi-k2.6` on OpenRouter/Cloudflare).
+- **GitHub Models**: endpoint `https://models.inference.ai.azure.com`, models: `Meta-Llama-3.3-70B-Instruct`, `Mistral-large-2411`, `Cohere-command-r-plus-08-2024`.
+- **OpenCode Zen**: endpoint `https://opencode.ai/zen/v1`, models: `deepseek-v4-flash-free`, `nemotron-3-ultra-free`, `big-pickle`, `north-mini-code-free`.
+- **Cloudflare**: model suffix `-fp8-fast` instead of `-fp8` (verified against the API docs). `deepseek-v4-flash` doesn't exist on Cloudflare.
+- **Cerebras**: `llama3.1-8b` was deprecated on 2026-05-27.
+- **LLM7.io**: OpenAI-compatible at `https://api.llm7.io/v1`. Free tier: 2 RPM (40 RPM with a free token from token.llm7.io). `api_key: "unused"` for the base tier.
+- **HuggingFace**: uses LiteLLM's `huggingface/` prefix → routes to the HF Inference API. Rate-limited, no credit card needed.
+- **OVHcloud**: OpenAI-compatible at `https://oai.endpoints.kepler.ai.cloud.ovh.net/v1`. **Anonymous free tier** without an API key (2 RPM/IP/model). `api_key: ""` in `config.yaml`.
+- **Google AI Studio**: currently **no active deployment** (Google retired the gemma-3 series, June 2026). `GEMINI_API_KEY` stays documented for future catalog syncs.
 
 ---
 
-## 3. Modelle & Deployment-Matrix
+## 3. Models & Deployment Matrix
 
-Die Matrix wird **generiert** (`python3 find-shared-models.py --write-docs`), nicht von Hand gepflegt — CI prüft auf Drift:
+The matrix is **generated** (`python3 find-shared-models.py --write-docs`), not hand-maintained — CI checks for drift:
 
 <!-- BEGIN GENERATED MODEL MATRIX (python3 find-shared-models.py --write-docs) -->
-Stand (aus `config.template.yaml` generiert): **36 model_names, 109 base-Deployments**. `render-config.py` entfernt Deployments von Providern ohne API-Key in `.env` – die effektive Anzahl kann daher kleiner sein.
+Snapshot (generated from `config.template.yaml`): **36 model_names, 109 base deployments**. `render-config.py` removes deployments from providers without an API key in `.env` — the effective count can therefore be lower.
 
 | model_name | Deployments | Provider |
 |---|---|---|
@@ -135,13 +135,13 @@ Stand (aus `config.template.yaml` generiert): **36 model_names, 109 base-Deploym
 | `openrouter-free` | 1 | OpenRouter |
 <!-- END GENERATED MODEL MATRIX -->
 
-**Hinweis zu `gemma-3-12b-it`**: Im Juni 2026 entfernt (Google hat die gemma-3-Serie eingestellt; kein Free-Provider bietet es mehr an). Ersatz: `gemma-4-26b-a4b-it` und `gemma-4-31b-it`.
+**Note on `gemma-3-12b-it`**: removed in June 2026 (Google retired the gemma-3 series; no free provider offers it anymore). Replacement: `gemma-4-26b-a4b-it` and `gemma-4-31b-it`.
 
-**Hinweis zu `qwen3-next-80b-a3b`**: Entfernt, weil kein 2. Free-Provider verfügbar war (Regel: alle Modelle ≥ 2 Provider außer den dokumentierten Ausnahmen `big-pickle`, `north-mini-code`, `openrouter-free`). Diese Regel wird jetzt von `tests/test_config_invariants.py` erzwungen.
+**Note on `qwen3-next-80b-a3b`**: removed because no 2nd free provider was available (rule: all models ≥ 2 providers except the documented exceptions `big-pickle`, `north-mini-code`, `openrouter-free`). This rule is now enforced by `tests/test_config_invariants.py`.
 
-### Multi-Instance (zusätzlich)
+### Multi-Instance (additional)
 
-Master-Config: 99 base + 72 Slave = **171 Deployments**. Jeder Slave hat eigene 99 base Deployments (andere API-Keys) → effektiv 3× Rate-Limit pro Provider.
+Master config: 99 base + 72 slave = **171 deployments**. Each slave has its own 99 base deployments (different API keys) → effectively 3× rate limit per provider.
 
 ---
 
@@ -151,77 +151,77 @@ Master-Config: 99 base + 72 Slave = **171 Deployments**. Jeder Slave hat eigene 
 
 ```yaml
 router_settings:
-  routing_strategy: usage-based-routing-v2   # rpm/tpm-Budget-bewusst
-  # redis_host/port/password (os.environ/REDIS_*) — nur gerendert, wenn
-  # REDIS_HOST gesetzt ist; dann instanzuebergreifendes Tracking + Cooldowns
+  routing_strategy: usage-based-routing-v2   # rpm/tpm-budget-aware
+  # redis_host/port/password (os.environ/REDIS_*) — only rendered if
+  # REDIS_HOST is set; then cross-instance tracking + cooldowns
   num_retries: 2
   retry_after: 5
   allowed_fails: 3
   cooldown_time: 30
 ```
 
-`tpm`/`rpm` liegen pro Deployment in **`litellm_params`** (nicht Top-Level!), damit der Router sie auswertet. Invarianten-Test erzwingt das.
+`tpm`/`rpm` live per-deployment in **`litellm_params`** (not top level!) so the router evaluates them. An invariant test enforces this.
 
-### Fallback-Chains
+### Fallback Chains
 
-Maßgeblich ist `config.template.yaml` (`router_settings.fallbacks` / `context_window_fallbacks`) — Beispiele hier absichtlich entfernt, weil kopierte Snippets in der Vergangenheit entfernte Modelle wieder eingeschleppt haben. Regeln:
+The authoritative source is `config.template.yaml` (`router_settings.fallbacks` / `context_window_fallbacks`) — examples are deliberately omitted here because copied snippets have reintroduced removed models in the past. Rules:
 
-- Jedes Chain-Ziel muss ein existierendes model_name sein (Invarianten-Test + `render-config.py` filtert beim Rendern zusätzlich).
-- `openrouter-free` wird beim Rendern automatisch an-/abgehängt, abhängig von `OPENROUTER_API_KEY`.
-- Catch-All `*` fängt unbekannte Modellnamen.
+- Every chain target must be an existing model_name (invariant test + `render-config.py` additionally filters at render time).
+- `openrouter-free` is automatically appended/removed at render time, depending on `OPENROUTER_API_KEY`.
+- Catch-all `*` catches unknown model names.
 
 ---
 
-## 5. Dateistruktur
+## 5. File Structure
 
 ```
 /home/sb/github/litellm-free-models/
-├── onboard.py                   # Interaktives Setup (wiederholbar): .env, Key-Eingabe mit
-│                                #   Signup-URLs, Live-Key-Check, Render, Compose-Start
-├── opencode-config.py           # Provider-Eintrag in ~/.config/opencode/opencode.json
-│                                #   anlegen/updaten (Live-Modelle, schema-konforme options.*)
-├── config.template.yaml         # Single Source of Truth mit {{ENV_VAR}} + # BEGIN/END REDIS-Markern
-├── config.yaml                  # Generiert (gitignored, enthält echte Keys)
-├── render-config.py             # Renderer: Substitution, Provider-Filter, Redis-Bloecke
-│                                #   konditional, Fallback-Key+Ziel-Validierung, --no-redis,
-│                                #   Backup der Vorversion + Auto-Prune (letzte 5)
-├── find-shared-models.py        # Katalog-Abfrage, Overlap-Report, --apply, --emit-matrix/--write-docs
-├── providers_config.py          # Zentrale Provider-Definitionen
-├── .env.example                 # Vorlage (Passwörter PFLICHT, leer ausgeliefert)
-├── docker-compose.yaml          # Single-Instance (Proxy + Redis + Postgres, :?-Pflicht-Passwörter)
-├── Dockerfile                   # Optionales Custom Image (⚠️ bündelt config.yaml mit echten Keys)
-├── Makefile                     # render/check/validate/k8s/backup/clean-Targets, LITELLM_IMAGE-Pin
-├── PLAN.md                      # Review-Befunde 2026-07-06 (Basis dieser Abarbeitung)
+├── onboard.py                   # Interactive setup (re-runnable): .env, key entry with
+│                                #   sign-up URLs, live key check, render, compose start
+├── opencode-config.py           # Create/update the provider entry in
+│                                #   ~/.config/opencode/opencode.json (live models, schema-compliant options.*)
+├── config.template.yaml         # Single source of truth with {{ENV_VAR}} + # BEGIN/END REDIS markers
+├── config.yaml                  # Generated (gitignored, contains real keys)
+├── render-config.py             # Renderer: substitution, provider filter, conditional Redis
+│                                #   blocks, fallback key+target validation, --no-redis,
+│                                #   backup of the previous version + auto-prune (last 5)
+├── find-shared-models.py        # Catalog query, overlap report, --apply, --emit-matrix/--write-docs
+├── providers_config.py          # Central provider definitions
+├── .env.example                 # Template (passwords REQUIRED, shipped empty)
+├── docker-compose.yaml          # Single instance (proxy + Redis + Postgres, :?-mandatory passwords)
+├── Dockerfile                   # Optional custom image (⚠️ bundles config.yaml with real keys)
+├── Makefile                     # render/check/validate/k8s/backup/clean targets, LITELLM_IMAGE pin
+├── PLAN.md                      # 2026-07-06 review findings (basis of this resolution)
 │
-├── k8s/                         # Kubernetes (Single-Instance)
-│   ├── configmap.yaml           # Generiert via make k8s-configmap (gitignored)
-│   ├── deployment.yaml          # LiteLLM (gepinntes Image, securityContext, DATABASE_URL)
+├── k8s/                         # Kubernetes (single instance)
+│   ├── configmap.yaml           # Generated via make k8s-configmap (gitignored)
+│   ├── deployment.yaml          # LiteLLM (pinned image, securityContext, DATABASE_URL)
 │   ├── service.yaml / ingress.yaml / namespace.yaml
-│   ├── networkpolicy.yaml       # Redis+Postgres nur von LiteLLM-Pods erreichbar
-│   ├── secret.yaml.template     # litellm-secrets (nur Doku; make k8s-secret erzeugt real)
+│   ├── networkpolicy.yaml       # Redis+Postgres reachable only from LiteLLM pods
+│   ├── secret.yaml.template     # litellm-secrets (docs only; make k8s-secret creates the real one)
 │   ├── postgres-secret.yaml.template
 │   ├── postgres-{pvc,deployment,service}.yaml
-│   ├── postgres-backup-{pvc,cronjob}.yaml   # Nightly pg_dump, 7 Dumps Retention
-│   └── redis/                   # GEMEINSAME Redis-Base (Single- UND Multi-Instance)
+│   ├── postgres-backup-{pvc,cronjob}.yaml   # Nightly pg_dump, 7-dump retention
+│   └── redis/                   # SHARED Redis base (single AND multi instance)
 │       ├── kustomization.yaml
-│       ├── deployment.yaml      # --save "" (kein PVC), 512Mi-Limit, sh -c Probes mit -e
+│       ├── deployment.yaml      # --save "" (no PVC), 512Mi limit, sh -c probes with -e
 │       ├── service.yaml
 │       └── secret.yaml.template
 │
-├── tests/                       # 109 Unit-Tests (unittest, stdlib-only)
-│   └── test_config_invariants.py  # Fallback-Ziele, ≥2-Provider-Regel, tpm/rpm-Lage, Redis-Marker
+├── tests/                       # 109 unit tests (unittest, stdlib-only)
+│   └── test_config_invariants.py  # fallback targets, ≥2-provider rule, tpm/rpm location, Redis markers
 │
 ├── .github/workflows/
-│   ├── ci.yml                   # ruff (blockierend), Test-Matrix, Render-Smoke,
-│   │                            #   Matrix-Drift-Check, compose config -q, kubeconform
-│   └── sync-models.yml          # Wöchentliche PR-Pipeline (SYNC_*-Secrets, Gates, kein Auto-Merge)
+│   ├── ci.yml                   # ruff (blocking), test matrix, render smoke test,
+│   │                            #   matrix drift check, compose config -q, kubeconform
+│   └── sync-models.yml          # Weekly PR pipeline (SYNC_* secrets, gates, no auto-merge)
 │
-└── multi-instance/              # Master + 2 Slaves
-    ├── .env.example             # Projekt-.env: REDIS_/POSTGRES_-Passwörter (Compose-Interpolation!)
-    ├── master/ slave1/ slave2/  # per-Instanz .env.example (NUR Provider-Keys)
+└── multi-instance/              # Master + 2 slaves
+    ├── .env.example             # Project .env: REDIS_/POSTGRES_ passwords (Compose interpolation!)
+    ├── master/ slave1/ slave2/  # per-instance .env.example (ONLY provider keys)
     ├── generate-config.py
     ├── docker-compose.yaml
-    ├── k8s/                     # kustomization referenziert ../../k8s/redis als Base
+    ├── k8s/                     # kustomization references ../../k8s/redis as a base
     └── README.md
 ```
 
@@ -230,151 +230,151 @@ Maßgeblich ist `config.template.yaml` (`router_settings.fallbacks` / `context_w
 ## 6. Deployment
 
 ```bash
-# Docker Compose (Single-Instance)
-make docker-compose-up          # rendert + startet; REDIS_/POSTGRES_PASSWORD in .env PFLICHT
+# Docker Compose (single instance)
+make docker-compose-up          # renders + starts; REDIS_/POSTGRES_PASSWORD in .env REQUIRED
 
-# Kubernetes (Single-Instance)
-make k8s-apply                  # namespace + secrets (aus .env) + configmap + alles
+# Kubernetes (single instance)
+make k8s-apply                  # namespace + secrets (from .env) + configmap + everything
 
 # Multi-Instance
 cd multi-instance
 python3 generate-config.py
-cp .env.example .env            # Redis-/Postgres-Passwörter (Compose liest NUR diese!)
-# master/slave .env-Dateien befüllen
+cp .env.example .env            # Redis/Postgres passwords (Compose reads ONLY these!)
+# fill in master/slave .env files
 docker compose up -d
 ```
 
 ---
 
-## 7. Status & Bekannte Einschränkungen
+## 7. Status & Known Limitations
 
-### Abgeschlossen (Stand 2026-07-16)
-- ✅ 13 Provider integriert, 36 model_names / 109 base Deployments (generierte Matrix in §3)
-- ✅ Redis-Cache + Auth-Cache, **konditional gerendert** (ohne REDIS_HOST → Redis-frei)
-- ✅ `usage-based-routing-v2` mit Redis-Tracking; tpm/rpm in litellm_params
-- ✅ Passwort-Flow: keine committeten Defaults mehr; Compose erzwingt Passwörter (`:?`),
-  `make k8s-secret` erzeugt litellm-secrets (Allowlist) + Redis-/Postgres-Secrets aus .env
-- ✅ Redis: keine Persistenz (`--save ""`), kein PVC, Limits mit Headroom, Probes via `sh -c` + `-e`
-- ✅ Manifest-Dedup: gemeinsame `k8s/redis/`-Base für beide Setups
-- ✅ CI: ruff blockierend, `make test` propagiert Exit-Codes, Invarianten-Tests,
-  `docker compose config -q`, kubeconform, Kustomize-Builds, Matrix-Drift-Check
-- ✅ Sync-Workflow → wöchentliche PR-Pipeline mit Gates (kein Auto-Merge, Fail ohne Secrets)
-- ✅ Image auf `v1.92.0` gepinnt (Makefile `LITELLM_IMAGE`, Compose, K8s, Dockerfile)
-- ✅ securityContext überall, NetworkPolicies für Redis/Postgres
-- ✅ Postgres-Backup: K8s-CronJob (nightly, 7 Dumps) + `make backup-db`/`restore-db` für Compose
-- ✅ `make check-config` bootet LiteLLM real gegen einen Redis-freien Render (Port 4010)
+### Completed (as of 2026-07-16)
+- ✅ 13 providers integrated, 36 model_names / 109 base deployments (generated matrix in §3)
+- ✅ Redis cache + auth cache, **conditionally rendered** (without REDIS_HOST → Redis-free)
+- ✅ `usage-based-routing-v2` with Redis tracking; tpm/rpm in litellm_params
+- ✅ Password flow: no more committed defaults; Compose enforces passwords (`:?`),
+  `make k8s-secret` creates litellm-secrets (allowlist) + Redis/Postgres secrets from .env
+- ✅ Redis: no persistence (`--save ""`), no PVC, limits with headroom, probes via `sh -c` + `-e`
+- ✅ Manifest dedup: shared `k8s/redis/` base for both setups
+- ✅ CI: ruff blocking, `make test` propagates exit codes, invariant tests,
+  `docker compose config -q`, kubeconform, kustomize builds, matrix drift check
+- ✅ Sync workflow → weekly PR pipeline with gates (no auto-merge, fails without secrets)
+- ✅ Image pinned to `v1.92.0` (Makefile `LITELLM_IMAGE`, Compose, K8s, Dockerfile)
+- ✅ securityContext everywhere, NetworkPolicies for Redis/Postgres
+- ✅ Postgres backup: K8s CronJob (nightly, 7 dumps) + `make backup-db`/`restore-db` for Compose
+- ✅ `make check-config` boots LiteLLM for real against a Redis-free render (port 4010)
 
-### Offen / Einschränkungen
-- ❌ Keine API-Keys vorhanden → keine Live-LLM-Tests möglich
-- ❌ `SYNC_*`-GitHub-Secrets für die Sync-PR-Pipeline müssen noch angelegt werden
-- ❌ Redis als Single-Pod ohne Sentinel/Cluster (für Free-Tier-Proxy OK)
-- ❌ Multi-Instance-K8s hat kein eigenes Postgres/DATABASE_URL (Instanzen laufen dort DB-los;
-  bewusst nicht nachgerüstet — bei Bedarf analog Single-Instance verdrahten)
-- ⚠️ K8s-Postgres wurde von 15-alpine auf 16-alpine angehoben (Konsistenz mit Compose).
-  Ein bereits mit PG15 initialisiertes PVC startet mit PG16 nicht — vorher dumpen/restoren.
+### Open / Limitations
+- ❌ No API keys available → no live LLM tests possible
+- ❌ `SYNC_*` GitHub secrets for the sync PR pipeline still need to be created
+- ❌ Redis as a single pod without Sentinel/cluster (fine for a free-tier proxy)
+- ❌ Multi-instance K8s has no own Postgres/DATABASE_URL (instances run DB-less there;
+  deliberately not retrofitted — wire it up analogously to the single instance if needed)
+- ⚠️ K8s Postgres was bumped from 15-alpine to 16-alpine (consistency with Compose).
+  A PVC already initialized with PG15 won't start with PG16 — dump/restore beforehand.
 
 ---
 
-## 8. Wichtige Entscheidungen
+## 8. Key Decisions
 
-1. **Provider-Präfixe**: `openrouter/`, `cerebras/`, `groq/`, `cloudflare/`, `gemini/` — von LiteLLM automatisch geroutet. `openai/` für NVIDIA, GitHub Models, OpenCode Zen, LLM7.io und OVHcloud mit je eigener `api_base`.
-2. **Kein PyYAML**: Alle Generatoren/Tests parsen YAML zeilenbasiert (stdlib-only).
-3. **Slave-Config per Volume-Mount**: Slaves referenzieren `../config.yaml`; nur die Master-Config wird generiert.
-4. **Reverse-Proxy-Provider abgelehnt**: Pollinations.ai, UncloseAI, G4F.dev (Legalität/Reliabilität).
-5. **Template als Single Source of Truth**: Edits nur in `config.template.yaml`; `config.yaml` wird überschrieben.
-6. **OpenRouter-Free-Fallback an/aus** je nach `OPENROUTER_API_KEY` (Renderer).
-7. **Redis konditional** (`# BEGIN/END REDIS`-Marker): ohne `REDIS_HOST` (oder mit `--no-redis`) werden Cache- UND Router-Redis-Block entfernt — kein Degradieren gegen unerreichbares Redis. `make docker-run`/`check-config` nutzen `--no-redis`.
-8. **Response-Cache bewusst mit TTL 300 s**: identische Requests liefern binnen 5 min die identische Antwort (auch bei temperature > 0); Opt-out `{"cache": {"no-cache": true}}`. Dokumentiert in README "Response Cache".
-9. **Secret-Konvention**: committet werden nur `*.template`-Dateien; reale Secrets erzeugt `make k8s-secret` aus `.env` (litellm-secrets mit expliziter Key-Allowlist, litellm-redis-secret, litellm-postgres-secret). `k8s-apply` wendet NIE ein Secret-File an.
-10. **Passwörter ohne Defaults**: Compose nutzt `${VAR:?}`-Interpolation; `.env.example` liefert leere Pflichtfelder. In Multi-Instance liest Compose Passwörter NUR aus `multi-instance/.env` (per-Service `env_file` wird für Interpolation nie benutzt).
-11. **Redis ist reiner Cache**: `--save ""`, kein PVC/emptyDir-Persistenz — Cache wärmt sich selbst wieder auf; Memory-Limit 512Mi = 2× maxmemory (Fragmentierungs-Headroom).
-12. **Image-Pinning**: `ghcr.io/berriai/litellm:v1.92.0` überall statt `main-latest`; zentrale Variable `LITELLM_IMAGE` im Makefile; Dependabot (docker) bumpt das Dockerfile, Compose/K8s dann manuell nachziehen. Seit v1.9x taggt BerriAI stabile Releases als nacktes `vX.Y.Z` statt `main-vX.Y.Z-stable`.
-13. **usage-based-routing-v2 statt simple-shuffle**: simple-shuffle ignorierte die gepflegten rpm/tpm-Werte komplett (rpm:1-OpenRouter bekam gleich viel Traffic wie rpm:40-NVIDIA). Dafür mussten tpm/rpm nach `litellm_params` wandern.
-14. **Doku-Matrix wird generiert** (`--write-docs` zwischen HTML-Marker); CI failt bei Drift. Handgepflegte Deployment-Zahlen sind abgeschafft.
-15. **Sync-PR-Pipeline konservativ**: `--apply` fügt nur hinzu/aktualisiert Kosten; Modell-Entfernungen bleiben manuell (Katalog-Flapping). Ohne `SYNC_*`-Secrets failt der Run laut.
-16. **`opencode-config.py` schreibt schema-konform**: `apiKey`/`baseURL`/`timeout`/`chunkTimeout` liegen laut offiziellem Schema (`https://opencode.ai/config.json` → `$defs.ProviderConfig`, `additionalProperties: false`) in `options`, nicht auf oberster Ebene — ein `apiKey` außerhalb von `options` ist schema-ungültig. Beim Update eines bestehenden Provider-Eintrags wird dessen `options.baseURL` beibehalten, sofern `--host`/`--port`/`--base-url` nicht explizit gesetzt sind (verhindert, dass ein Re-Run eine LAN-erreichbare Adresse stillschweigend durch den lokalen Default ersetzt).
+1. **Provider prefixes**: `openrouter/`, `cerebras/`, `groq/`, `cloudflare/`, `gemini/` — routed automatically by LiteLLM. `openai/` for NVIDIA, GitHub Models, OpenCode Zen, LLM7.io, and OVHcloud, each with its own `api_base`.
+2. **No PyYAML**: all generators/tests parse YAML line-based (stdlib-only).
+3. **Slave config via volume mount**: slaves reference `../config.yaml`; only the master config gets generated.
+4. **Reverse-proxy providers rejected**: Pollinations.ai, UncloseAI, G4F.dev (legality/reliability).
+5. **Template as single source of truth**: edits only in `config.template.yaml`; `config.yaml` gets overwritten.
+6. **OpenRouter-free fallback on/off** depending on `OPENROUTER_API_KEY` (renderer).
+7. **Redis conditional** (`# BEGIN/END REDIS` markers): without `REDIS_HOST` (or with `--no-redis`), both the cache AND router Redis blocks are removed — no degrading against unreachable Redis. `make docker-run`/`check-config` use `--no-redis`.
+8. **Response cache deliberately has a 300s TTL**: identical requests return the identical answer within 5 minutes (even with temperature > 0); opt-out via `{"cache": {"no-cache": true}}`. Documented in the README "Response Cache" section.
+9. **Secret convention**: only `*.template` files are committed; real secrets are created by `make k8s-secret` from `.env` (litellm-secrets with an explicit key allowlist, litellm-redis-secret, litellm-postgres-secret). `k8s-apply` NEVER applies a secret file.
+10. **Passwords without defaults**: Compose uses `${VAR:?}` interpolation; `.env.example` ships empty required fields. In multi-instance, Compose reads passwords ONLY from `multi-instance/.env` (per-service `env_file` is never used for interpolation).
+11. **Redis is a pure cache**: `--save ""`, no PVC/emptyDir persistence — the cache re-warms itself; memory limit 512Mi = 2× maxmemory (fragmentation headroom).
+12. **Image pinning**: `ghcr.io/berriai/litellm:v1.92.0` everywhere instead of `main-latest`; a central `LITELLM_IMAGE` variable in the Makefile; Dependabot (docker) bumps the Dockerfile, Compose/K8s then get updated manually. Since v1.9x, BerriAI tags stable releases as bare `vX.Y.Z` instead of `main-vX.Y.Z-stable`.
+13. **usage-based-routing-v2 instead of simple-shuffle**: simple-shuffle completely ignored the maintained rpm/tpm values (rpm:1 OpenRouter got the same amount of traffic as rpm:40 NVIDIA). This required moving tpm/rpm into `litellm_params`.
+14. **Docs matrix is generated** (`--write-docs` between HTML markers); CI fails on drift. Hand-maintained deployment counts are a thing of the past.
+15. **Sync PR pipeline is conservative**: `--apply` only adds/updates costs; model removals stay manual (catalog flapping). Without `SYNC_*` secrets the run fails loudly.
+16. **`opencode-config.py` writes schema-compliant output**: per the official schema (`https://opencode.ai/config.json` → `$defs.ProviderConfig`, `additionalProperties: false`), `apiKey`/`baseURL`/`timeout`/`chunkTimeout` live under `options`, not at the top level — an `apiKey` outside `options` is schema-invalid. When updating an existing provider entry, its `options.baseURL` is preserved unless `--host`/`--port`/`--base-url` is explicitly set (prevents a re-run from silently replacing a LAN-reachable address with the local default).
 
 ---
 
 ## 9. Commands
 
 ```bash
-# Onboarding (Erst-Setup UND Aenderungen: Keys, Passwoerter, Restart)
-make onboard                    # interaktiv; --non-interactive fuer Skripte
+# Onboarding (initial setup AND changes: keys, passwords, restart)
+make onboard                    # interactive; --non-interactive for scripts
 
-# Rendern & Validieren
-make render-config              # Template -> config.yaml (Redis je nach REDIS_HOST)
-                                # warnt, wenn model_names nur noch 1 Deployment haben
-make render-config-no-redis     # explizit ohne Redis-Bloecke
-make check-config               # bootet LiteLLM gegen Redis-freien Render (Port 4010)
-make validate-manifests         # compose config -q + kubeconform (falls installiert)
-make test                       # Unit-Tests inkl. Invarianten
-make opencode-config            # Provider-Eintrag in ~/.config/opencode/opencode.json
-                                # anlegen/updaten (Live-Modelle, options.timeout/chunkTimeout)
+# Render & Validate
+make render-config              # template -> config.yaml (Redis depending on REDIS_HOST)
+                                # warns if a model_name has only 1 deployment left
+make render-config-no-redis     # explicitly without Redis blocks
+make check-config               # boots LiteLLM against a Redis-free render (port 4010)
+make validate-manifests         # compose config -q + kubeconform (if installed)
+make test                       # unit tests including invariants
+make opencode-config            # create/update the provider entry in
+                                # ~/.config/opencode/opencode.json (live models, options.timeout/chunkTimeout)
 make lint / make format         # ruff
-make clean                      # Backups/Reports/Caches aufräumen
+make clean                      # clean up backups/reports/caches
 
-# Provider-Overlap & Kosten
-python3 find-shared-models.py                   # Report (Dry-Run)
-python3 find-shared-models.py --apply           # ins Template schreiben + rendern
+# Provider Overlap & Cost
+python3 find-shared-models.py                   # report (dry run)
+python3 find-shared-models.py --apply           # write into the template + render
 python3 find-shared-models.py --apply --regen-multi-instance
-python3 find-shared-models.py --emit-matrix     # Deployment-Matrix nach stdout
-python3 find-shared-models.py --write-docs      # Matrix in AGENTS.md/README.md schreiben
+python3 find-shared-models.py --emit-matrix     # deployment matrix to stdout
+python3 find-shared-models.py --write-docs      # write the matrix into AGENTS.md/README.md
 
 # Docker / K8s
 make docker-compose-up / docker-compose-down
-make docker-run                 # Standalone ohne Redis (rendert --no-redis, baut Image)
+make docker-run                 # standalone without Redis (renders --no-redis, builds the image)
 make k8s-apply / k8s-delete / k8s-secret / k8s-configmap / k8s-restart
-make backup-db / restore-db     # Compose-Postgres nach/aus ./backups/
+make backup-db / restore-db     # dump/restore Compose Postgres to/from ./backups/
 
 # Multi-Instance
 cd multi-instance && python3 generate-config.py
-docker compose up -d            # (vorher .env + per-Instanz .envs anlegen)
-kubectl apply -k k8s/           # K8s-Variante (nutzt ../../k8s/redis als Base)
+docker compose up -d            # (first create .env + per-instance .envs)
+kubectl apply -k k8s/           # K8s variant (uses ../../k8s/redis as a base)
 ```
 
 ---
 
-## 10. Provider-Overlap & Kosten-Check (Modell-Discovery)
+## 10. Provider Overlap & Cost Check (Model Discovery)
 
 `find-shared-models.py`:
 
-1. **Live-Abfrage** aller Provider via `.env`-Keys (`providers-overlap.txt`) — **parallel** (ThreadPool, <2 s statt sequenziell) mit **Retry/Backoff** bei 429/5xx/Netzfehlern. OVHcloud/LLM7/HF laufen auch ohne Key.
-2. **Free-Tier-Filter**: OpenRouter liefert nur noch `:free`-/0-Preis-Modelle (sonst könnte `--apply` ein Paid-Modell einschleusen); Google AI nur `generateContent`-fähige Modelle; Cohere nur chat-fähige Modellnamen; HuggingFace kommt live vom Inference-Router (`router.huggingface.co/v1/models`) statt aus einer hartkodierten Liste (Fallback-Liste → Provider wird als „partial" markiert und vom Stale-Check ausgenommen). Cloudflare wird über `/ai/models/search` (paginiert) abgefragt, GitHub Models versteht Liste- und Dict-Antworten.
-3. **Gruppierung** nach normalisierten Modellnamen, Filter auf ≥ 2 Provider.
-4. **Kosten-Vergleich** (hypothetischer Paid-Tier-Preis) aus der LiteLLM-Referenz-DB, 24h-Cache unter `.cache/litellm-prices.json`.
-5. **Apply-Plan-Mapping**: normalisierte Gruppennamen werden auf die sprechenden Template-`model_names` gemappt (plus globales Dedupe) — bestehende Deployments werden zuverlässig als `skip` erkannt statt als Duplikat geplant. Provider-Erkennung im Template nutzt die api_base-Diskrimination aus `render-config.py` (NVIDIA/GitHub/Zen/LLM7/OVH teilen sich das `openai/`-Präfix).
-6. **Stale-Deployment-Erkennung** (Gegenrichtung zum Apply-Plan): Template-Deployments, deren Modell im Live-Katalog fehlt, landen als eigener Report-Abschnitt („Verwaiste Template-Deployments") — **report-only**, Entfernungen bleiben manuell. Geprüft nur gegen erfolgreich UND vollständig abgefragte Kataloge. Fund-Beispiel: die OVHcloud-ID `Meta-Llama-3_3-...` (Unterstrich) war im Template falsch mit Punkt geschrieben.
-7. `--apply` schreibt neue Deployments ins Template (tpm/rpm in litellm_params!) und rendert.
-8. `--emit-matrix`/`--write-docs` generieren die Doku-Matrix (§3).
+1. **Live query** of all providers via `.env` keys (`providers-overlap.txt`) — **in parallel** (ThreadPool, <2s instead of sequential) with **retry/backoff** on 429/5xx/network errors. OVHcloud/LLM7/HF also work without a key.
+2. **Free-tier filter**: OpenRouter only returns `:free`/zero-priced models (otherwise `--apply` could smuggle in a paid model); Google AI only `generateContent`-capable models; Cohere only chat-capable model names; HuggingFace comes live from the Inference Router (`router.huggingface.co/v1/models`) instead of a hardcoded list (fallback list → provider gets marked "partial" and excluded from the stale check). Cloudflare is queried via `/ai/models/search` (paginated), GitHub Models understands both list and dict responses.
+3. **Grouping** by normalized model names, filtered to ≥ 2 providers.
+4. **Cost comparison** (hypothetical paid-tier price) from the LiteLLM reference DB, 24h cache under `.cache/litellm-prices.json`.
+5. **Apply-plan mapping**: normalized group names are mapped onto the template's descriptive `model_names` (plus global dedup) — existing deployments are reliably recognized as `skip` instead of being planned as a duplicate. Provider detection in the template uses the api_base discrimination from `render-config.py` (NVIDIA/GitHub/Zen/LLM7/OVH share the `openai/` prefix).
+6. **Stale-deployment detection** (the reverse of the apply plan): template deployments whose model is missing from the live catalog end up in their own report section ("Orphaned template deployments") — **report-only**, removals stay manual. Checked only against catalogs that were fetched successfully AND completely. Example find: the OVHcloud ID `Meta-Llama-3_3-...` (underscore) was mistakenly written with a dot in the template.
+7. `--apply` writes new deployments into the template (tpm/rpm in litellm_params!) and renders.
+8. `--emit-matrix`/`--write-docs` generate the docs matrix (§3).
 
-**Wichtige Insight:** `input_cost_per_token`/`output_cost_per_token` im Report zeigen den _Paid-Tier_-Preis; in `config.yaml` bleiben die model_info-Kosten dokumentarisch, das Routing bleibt Free-Tier.
+**Important insight:** `input_cost_per_token`/`output_cost_per_token` in the report show the _paid-tier_ price; in `config.yaml` the model_info costs stay documentary — routing remains free-tier.
 
-**Automatisiert:** `.github/workflows/sync-models.yml` führt denselben Sync wöchentlich mit `SYNC_*`-Secrets aus und öffnet einen PR (Gates: ruff, Tests, Render, kubeconform; nie Auto-Merge).
+**Automated:** `.github/workflows/sync-models.yml` runs the same sync weekly with `SYNC_*` secrets and opens a PR (gates: ruff, tests, render, kubeconform; never auto-merged).
 
 ---
 
-## 11. Template-Pipeline (`config.template.yaml` → `config.yaml`)
+## 11. Template Pipeline (`config.template.yaml` → `config.yaml`)
 
 ```
-config.template.yaml    im Repo eingecheckt, {{ENV_VAR}}-Platzhalter + Redis-Marker
+config.template.yaml    checked into the repo, {{ENV_VAR}} placeholders + Redis markers
         │
-        │  python3 render-config.py [--no-redis] [--dry-run] [--output <pfad>]
+        │  python3 render-config.py [--no-redis] [--dry-run] [--output <path>]
         ▼
-config.yaml             bei jedem Render neu geschrieben (gitignored)
+config.yaml             rewritten on every render (gitignored)
         │
-        ├─► LiteLLM-Container
+        ├─► LiteLLM container
         └─► multi-instance/generate-config.py
 ```
 
-**Verhalten von `render-config.py`:**
+**Behavior of `render-config.py`:**
 
-1. **Platzhalter-Substitution**: `{{OPENROUTER_API_KEY}}` → Wert aus `.env`.
-2. **Provider-Filter**: fehlt ein required Key, fliegt der Provider-Block (inkl. Kommentar-Header) raus. OVHcloud akzeptiert leeren Key.
-3. **Redis-Bloecke**: `# BEGIN REDIS ...`/`# END REDIS ...`-Bereiche (Cache in litellm_settings, redis_* in router_settings) werden nur behalten, wenn `REDIS_HOST` gesetzt ist und kein `--no-redis` übergeben wurde; die Marker-Zeilen selbst werden immer entfernt.
-4. **OpenRouter-Free-Fallback**: an/aus je nach Key.
-5. **Fallback-Validierung**: verwaiste Keys UND verwaiste Chain-Ziele werden entfernt (fallbacks + context_window_fallbacks).
-6. **Atomare Writes**: Backup der VORHERIGEN Version als `config.yaml.bak.<timestamp>`, Auto-Prune auf die letzten 5.
-7. **Single-Deployment-Warnung**: Nach dem Provider-Filter wird gewarnt, wenn ein model_name nur noch 1 Deployment hat (Ausnahmen: `SINGLE_PROVIDER_ALLOWED`) — die ≥ 2-Provider-Regel gilt nur fürs Template, fehlende Keys können die Redundanz zur Laufzeit aufheben.
+1. **Placeholder substitution**: `{{OPENROUTER_API_KEY}}` → value from `.env`.
+2. **Provider filter**: if a required key is missing, the provider block (including the comment header) is removed. OVHcloud accepts an empty key.
+3. **Redis blocks**: `# BEGIN REDIS ...`/`# END REDIS ...` regions (cache in litellm_settings, redis_* in router_settings) are only kept if `REDIS_HOST` is set and `--no-redis` was not passed; the marker lines themselves are always removed.
+4. **OpenRouter-free fallback**: on/off depending on the key.
+5. **Fallback validation**: orphaned keys AND orphaned chain targets are removed (fallbacks + context_window_fallbacks).
+6. **Atomic writes**: backup of the PREVIOUS version as `config.yaml.bak.<timestamp>`, auto-pruned to the last 5.
+7. **Single-deployment warning**: after the provider filter, warns if a model_name has only 1 deployment left (exceptions: `SINGLE_PROVIDER_ALLOWED`) — the ≥ 2-provider rule only applies to the template; missing keys can remove the redundancy at runtime.
 
-**Auslöser:** manuell, via Makefile-Dependencies (`docker-compose-up`, `k8s-apply`, `k8s-configmap`), nach `find-shared-models.py --apply`, in CI.
+**Triggered by:** manually, via Makefile dependencies (`docker-compose-up`, `k8s-apply`, `k8s-configmap`), after `find-shared-models.py --apply`, in CI.

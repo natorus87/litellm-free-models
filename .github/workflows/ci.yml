@@ -25,8 +25,8 @@ jobs:
       - name: Install ruff
         run: pip install ruff
 
-      # Blockierend – ein Lint, der nie fehlschlagen kann, erzeugt nur
-      # falsches Vertrauen.
+      # Blocking – a lint that can never fail just creates false
+      # confidence.
       - name: Run ruff
         run: ruff check .
 
@@ -47,12 +47,12 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
 
-      # make test laeuft ohne Pipe – fehlschlagende Tests machen den Job rot
-      # (frueher verschluckte `| tail -5` den unittest-Exit-Code).
-      - name: Run tests (inkl. Config-Invarianten)
+      # make test runs without a pipe – failing tests turn the job red
+      # (`| tail -5` used to swallow the unittest exit code).
+      - name: Run tests (incl. config invariants)
         run: make test
 
-      - name: Prepare CI .env (Platzhalter-Keys aus .env.example)
+      - name: Prepare CI .env (placeholder keys from .env.example)
         run: |
           cp .env.example .env
           sed -i 's/^REDIS_PASSWORD=$/REDIS_PASSWORD=ci-dummy-password/' .env
@@ -67,12 +67,12 @@ jobs:
           python3 render-config.py --no-redis --output config.check.yaml
           cd multi-instance && python3 generate-config.py
 
-      - name: Matrix-Generator (Doku-Drift-Check)
+      - name: Matrix generator (docs drift check)
         run: |
           python3 find-shared-models.py --write-docs
           if ! git diff --quiet -- AGENTS.md README.md; then
-            echo "::error::Deployment-Matrix in AGENTS.md/README.md ist nicht aktuell."
-            echo "Bitte lokal 'python3 find-shared-models.py --write-docs' ausfuehren und committen."
+            echo "::error::Deployment matrix in AGENTS.md/README.md is out of date."
+            echo "Please run 'python3 find-shared-models.py --write-docs' locally and commit."
             git diff -- AGENTS.md README.md | head -80
             exit 1
           fi
@@ -101,7 +101,7 @@ jobs:
             cp "multi-instance/$d/.env.example" "multi-instance/$d/.env"
           done
 
-      - name: Render configs (fuer ConfigMaps + Compose-Mounts)
+      - name: Render configs (for ConfigMaps + Compose mounts)
         run: |
           python3 render-config.py
           cd multi-instance && python3 generate-config.py

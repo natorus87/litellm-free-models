@@ -2,7 +2,7 @@
 
 A [LiteLLM](https://github.com/BerriAI/litellm) proxy that aggregates **exclusively free LLM APIs** from 13 providers — with automatic load balancing, cooldown, and fallback chains. The same model (e.g. `gpt-oss-120b`) is covered by multiple providers to bypass individual free-tier rate limits.
 
-![Tests](https://img.shields.io/badge/tests-89_passing-brightgreen)
+![Tests](https://img.shields.io/badge/tests-109_passing-brightgreen)
 ![License](https://img.shields.io/badge/license-MIT-blue)
 ![Python](https://img.shields.io/badge/python-3.10%2B-blue)
 ![LiteLLM](https://img.shields.io/badge/litellm-proxy-orange)
@@ -49,7 +49,7 @@ A [LiteLLM](https://github.com/BerriAI/litellm) proxy that aggregates **exclusiv
 **Easiest path — guided onboarding** (creates `.env`, generates passwords, walks you through API keys with sign-up URLs, live-checks the keys, renders the config, and starts Docker Compose):
 
 ```bash
-git clone https://github.com/<your-user>/litellm-free-models.git
+git clone https://github.com/natorus87/litellm-free-models.git
 cd litellm-free-models
 make onboard          # or: python3 onboard.py
 ```
@@ -59,7 +59,7 @@ The script is safe to re-run any time — after adding a new API key, rotating p
 ### 1. Clone the repository
 
 ```bash
-git clone https://github.com/<your-user>/litellm-free-models.git
+git clone https://github.com/natorus87/litellm-free-models.git
 cd litellm-free-models
 ```
 
@@ -182,7 +182,7 @@ Sign-up URLs for the keys: see comments in [`.env.example`](.env.example).
 ## 🤖 Models
 
 <!-- BEGIN GENERATED MODEL MATRIX (python3 find-shared-models.py --write-docs) -->
-Stand (aus `config.template.yaml` generiert): **36 model_names, 109 base-Deployments**. `render-config.py` entfernt Deployments von Providern ohne API-Key in `.env` – die effektive Anzahl kann daher kleiner sein.
+Snapshot (generated from `config.template.yaml`): **36 model_names, 109 base deployments**. `render-config.py` removes deployments from providers without an API key in `.env` — the effective count can therefore be lower.
 
 | model_name | Deployments | Provider |
 |---|---|---|

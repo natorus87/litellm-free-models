@@ -1,31 +1,32 @@
 #!/usr/bin/env python3
 """
-Generiert/erweitert eine OpenCode-Config (~/.config/opencode/opencode.json)
-um einen Provider-Eintrag fuer diesen LiteLLM-Proxy.
+Generates/extends an OpenCode config (~/.config/opencode/opencode.json)
+with a provider entry for this LiteLLM proxy.
 
-Schreibt NUR den einen Provider-Key (Default: "litellm") -- alle anderen
-Provider und Top-Level-Felder in der Zieldatei bleiben unangetastet. Der
-Provider-Block wird schema-konform gemaess https://opencode.ai/config.json
-gebaut (apiKey/baseURL/timeout/chunkTimeout gehoeren in "options", nicht
-auf die oberste Ebene -- das war in bestehenden Configs teils falsch).
+Writes ONLY that one provider key (default: "litellm") -- every other
+provider and top-level field in the target file is left untouched. The
+provider block is built schema-compliant per
+https://opencode.ai/config.json (apiKey/baseURL/timeout/chunkTimeout
+belong under "options", not at the top level -- existing configs
+sometimes got that wrong).
 
-Modell-Liste:
-  - Standard: live von diesem Proxy per GET /models abgefragt (spiegelt
-    exakt wider, was mit den aktuell gesetzten .env-Keys servierbar ist).
-  - Fallback (--from-template oder wenn der Proxy nicht erreichbar ist):
-    aus config.template.yaml geparst (kann Modelle enthalten, die ohne
-    den passenden API-Key nicht wirklich verfuegbar sind).
+Model list:
+  - Default: queried live from this proxy via GET /models (exactly
+    mirrors what's servable with the currently-set .env keys).
+  - Fallback (--from-template, or if the proxy isn't reachable): parsed
+    from config.template.yaml (may include models that aren't actually
+    available without the matching API key).
 
-Idempotent und sicher wiederholbar: legt vor jedem Schreiben ein
-Timestamp-Backup der vorherigen opencode.json an (die letzten 5 werden
-behalten), unterstuetzt --dry-run zum Pruefen ohne zu schreiben.
+Idempotent and safe to re-run: creates a timestamped backup of the
+previous opencode.json before every write (the last 5 are kept), supports
+--dry-run to preview without writing.
 
-Nutzung:
-    python3 opencode-config.py                       # localhost:4444, schreibt
-    python3 opencode-config.py --dry-run              # nur Vorschau
-    python3 opencode-config.py --host 10.11.13.93     # anderer Host
-    python3 opencode-config.py --from-template         # ohne Live-Abfrage
-    python3 opencode-config.py --output /pfad/zu/opencode.json
+Usage:
+    python3 opencode-config.py                       # localhost:4444, writes
+    python3 opencode-config.py --dry-run              # preview only
+    python3 opencode-config.py --host 10.11.13.93     # different host
+    python3 opencode-config.py --from-template         # without a live query
+    python3 opencode-config.py --output /path/to/opencode.json
     make opencode-config
 """
 
@@ -47,9 +48,9 @@ DEFAULT_OUTPUT = Path.home() / ".config" / "opencode" / "opencode.json"
 
 DEFAULT_HOST = "localhost"
 DEFAULT_PORT = 4444
-DEFAULT_TIMEOUT_MS = 900_000       # 15 min -- volle Requests koennen bei
-                                    # Free-Tier-Fallback-Ketten lange dauern
-DEFAULT_CHUNK_TIMEOUT_MS = 120_000  # 2 min zwischen SSE-Chunks
+DEFAULT_TIMEOUT_MS = 900_000       # 15 min -- full requests can take a
+                                    # while with free-tier fallback chains
+DEFAULT_CHUNK_TIMEOUT_MS = 120_000  # 2 min between SSE chunks
 BACKUP_KEEP = 5
 
 
@@ -67,9 +68,9 @@ def load_env(path: Path) -> dict[str, str]:
 
 
 def fetch_live_models(base_url: str, api_key: str, timeout: int = 10) -> list[str] | None:
-    """GET {base_url}/models. Liefert None (statt zu werfen) wenn der Proxy
-    nicht erreichbar ist -- der Aufrufer faellt dann auf das Template
-    zurueck, statt das ganze Script abzubrechen."""
+    """GET {base_url}/models. Returns None (instead of raising) if the
+    proxy isn't reachable -- the caller then falls back to the template
+    instead of aborting the whole script."""
     url = base_url.rstrip("/") + "/models"
     headers = {"Authorization": f"Bearer {api_key}"} if api_key else {}
     try:
@@ -78,14 +79,14 @@ def fetch_live_models(base_url: str, api_key: str, timeout: int = 10) -> list[st
             data = json.loads(resp.read().decode("utf-8", errors="replace"))
         return sorted({m["id"] for m in data.get("data", []) if m.get("id")})
     except (urllib.error.URLError, OSError, TimeoutError, ValueError, KeyError) as exc:
-        print(f"  [WARN] Live-Abfrage von {url} fehlgeschlagen ({exc}) "
-              "-- falle auf config.template.yaml zurueck.", file=sys.stderr)
+        print(f"  [WARN] Live query to {url} failed ({exc}) "
+              "-- falling back to config.template.yaml.", file=sys.stderr)
         return None
 
 
 def models_from_template(template_path: Path) -> list[str]:
-    """Parst model_names direkt aus config.template.yaml (ungefiltert --
-    kann Modelle enthalten, deren Provider-Key in .env fehlt)."""
+    """Parses model_names directly from config.template.yaml (unfiltered --
+    may include models whose provider key is missing from .env)."""
     text = template_path.read_text(encoding="utf-8")
     names = sorted(set(re.findall(r"^\s*-\s*model_name:\s*(\S+)\s*$", text, re.MULTILINE)))
     return names
@@ -137,40 +138,40 @@ def main() -> int:
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     ap.add_argument("--host", default=None,
-                    help=f"Proxy-Host. Default: bestehende baseURL beim "
-                         f"Update wiederverwenden, sonst {DEFAULT_HOST}")
+                    help=f"Proxy host. Default: reuse the existing baseURL "
+                         f"on update, otherwise {DEFAULT_HOST}")
     ap.add_argument("--port", type=int, default=None,
-                    help=f"Proxy-Port. Default: bestehende baseURL beim "
-                         f"Update wiederverwenden, sonst {DEFAULT_PORT}")
+                    help=f"Proxy port. Default: reuse the existing baseURL "
+                         f"on update, otherwise {DEFAULT_PORT}")
     ap.add_argument("--base-url", default=None,
-                    help="Vollstaendige Base-URL, ueberschreibt --host/--port "
-                         "(z.B. http://10.11.13.93:4444/v1)")
+                    help="Full base URL, overrides --host/--port "
+                         "(e.g. http://10.11.13.93:4444/v1)")
     ap.add_argument("--api-key", default=None,
-                    help="Master-Key. Default: LITELLM_MASTER_KEY aus .env")
+                    help="Master key. Default: LITELLM_MASTER_KEY from .env")
     ap.add_argument("--env", type=Path, default=DEFAULT_ENV)
     ap.add_argument("--template", type=Path, default=DEFAULT_TEMPLATE)
     ap.add_argument("--provider-id", default="litellm",
-                    help="Key unter 'provider' in der opencode.json (default: litellm)")
+                    help="Key under 'provider' in opencode.json (default: litellm)")
     ap.add_argument("--name", default="Litellm-free-models",
-                    help="Anzeigename (default: Litellm-free-models)")
+                    help="Display name (default: Litellm-free-models)")
     ap.add_argument("--timeout", type=int, default=DEFAULT_TIMEOUT_MS,
-                    help=f"Request-Timeout in ms (default: {DEFAULT_TIMEOUT_MS})")
+                    help=f"Request timeout in ms (default: {DEFAULT_TIMEOUT_MS})")
     ap.add_argument("--chunk-timeout", type=int, default=DEFAULT_CHUNK_TIMEOUT_MS,
-                    help=f"SSE-Chunk-Timeout in ms (default: {DEFAULT_CHUNK_TIMEOUT_MS})")
+                    help=f"SSE chunk timeout in ms (default: {DEFAULT_CHUNK_TIMEOUT_MS})")
     ap.add_argument("--output", type=Path, default=DEFAULT_OUTPUT,
-                    help=f"Ziel-opencode.json (default: {DEFAULT_OUTPUT})")
+                    help=f"Target opencode.json (default: {DEFAULT_OUTPUT})")
     ap.add_argument("--from-template", action="store_true",
-                    help="Modelle aus config.template.yaml statt Live-Abfrage "
-                         "(z.B. wenn der Proxy gerade nicht laeuft)")
+                    help="Use models from config.template.yaml instead of a "
+                         "live query (e.g. when the proxy isn't running)")
     ap.add_argument("--dry-run", action="store_true",
-                    help="Nur anzeigen was geschrieben wuerde, nicht speichern")
+                    help="Only show what would be written, don't save")
     args = ap.parse_args()
 
     env = load_env(args.env)
     api_key = args.api_key or env.get("LITELLM_MASTER_KEY", "")
     if not api_key:
-        print("FEHLER: kein API-Key. --api-key setzen oder LITELLM_MASTER_KEY "
-              f"in {args.env} pflegen.", file=sys.stderr)
+        print("ERROR: no API key. Set --api-key or maintain LITELLM_MASTER_KEY "
+              f"in {args.env}.", file=sys.stderr)
         return 2
 
     config = load_opencode_config(args.output)
@@ -178,32 +179,32 @@ def main() -> int:
     existing_block = config["provider"].get(args.provider_id)
     existing_base_url = (existing_block or {}).get("options", {}).get("baseURL")
 
-    # baseURL-Prioritaet: explizite Flags > bestehender Wert beim Update
-    # (verhindert, dass ein re-Run versehentlich eine bereits funktionierende
-    # LAN-Adresse durch den lokalen Default ueberschreibt) > Default.
+    # baseURL priority: explicit flags > existing value on update (prevents
+    # a re-run from accidentally overwriting an already-working LAN address
+    # with the local default) > default.
     if args.base_url:
         base_url = args.base_url
     elif args.host or args.port:
         base_url = f"http://{args.host or DEFAULT_HOST}:{args.port or DEFAULT_PORT}/v1"
     elif existing_base_url:
         base_url = existing_base_url
-        print(f"Nutze bestehende baseURL aus {args.output}: {base_url}")
+        print(f"Reusing the existing baseURL from {args.output}: {base_url}")
     else:
         base_url = f"http://{DEFAULT_HOST}:{DEFAULT_PORT}/v1"
 
     models: list[str] | None = None
     if not args.from_template:
-        print(f"Frage Live-Modelle ab: {base_url}/models ...")
+        print(f"Querying live models: {base_url}/models ...")
         models = fetch_live_models(base_url, api_key)
     if models is None:
         if not args.template.exists():
-            print(f"FEHLER: {args.template} nicht gefunden und Live-Abfrage "
-                  "nicht moeglich.", file=sys.stderr)
+            print(f"ERROR: {args.template} not found and a live query "
+                  "isn't possible.", file=sys.stderr)
             return 2
-        print(f"Lese Modelle aus {args.template} ...")
+        print(f"Reading models from {args.template} ...")
         models = models_from_template(args.template)
 
-    print(f"{len(models)} Modelle: {', '.join(models[:6])}"
+    print(f"{len(models)} models: {', '.join(models[:6])}"
           f"{', ...' if len(models) > 6 else ''}")
 
     provider_block = build_provider_block(
@@ -220,10 +221,10 @@ def main() -> int:
     rendered = json.dumps(config, indent=2, ensure_ascii=False) + "\n"
 
     if args.dry_run:
-        print(f"\n--- DRY-RUN: provider.{args.provider_id} ---")
+        print(f"\n--- DRY RUN: provider.{args.provider_id} ---")
         print(json.dumps(provider_block, indent=2, ensure_ascii=False))
         if existing_block is not None and existing_block != provider_block:
-            print(f"\n(Wuerde bestehenden provider.{args.provider_id}-Block ersetzen)")
+            print(f"\n(Would replace the existing provider.{args.provider_id} block)")
         return 0
 
     args.output.parent.mkdir(parents=True, exist_ok=True)
@@ -239,9 +240,9 @@ def main() -> int:
     tmp.write_text(rendered, encoding="utf-8")
     tmp.replace(args.output)
 
-    action = "aktualisiert" if existing_block is not None else "angelegt"
-    print(f"\nprovider.{args.provider_id} in {args.output} {action} "
-          f"({len(models)} Modelle, baseURL={base_url}, "
+    action = "updated" if existing_block is not None else "created"
+    print(f"\nprovider.{args.provider_id} {action} in {args.output} "
+          f"({len(models)} models, baseURL={base_url}, "
           f"timeout={args.timeout}ms, chunkTimeout={args.chunk_timeout}ms).")
     return 0
 

@@ -1,12 +1,12 @@
 # =============================================================================
-# NetworkPolicies – Redis & Postgres nur für LiteLLM-Pods erreichbar
+# NetworkPolicies – Redis & Postgres reachable only from LiteLLM pods
 # =============================================================================
-# Ohne diese Policies kann jeder Pod im Namespace Redis (nur Passwort-
-# geschützt) und Postgres direkt ansprechen. Die LiteLLM-Pods selbst
-# bleiben unbeschränkt (sie brauchen Egress zu den Provider-APIs und
-# Ingress vom Service/Ingress-Controller).
+# Without these policies, any pod in the namespace can talk directly to
+# Redis (password-protected only) and Postgres. The LiteLLM pods
+# themselves stay unrestricted (they need egress to the provider APIs
+# and ingress from the service/ingress controller).
 #
-# Benötigt einen CNI mit NetworkPolicy-Support (Calico, Cilium, …).
+# Requires a CNI with NetworkPolicy support (Calico, Cilium, …).
 # =============================================================================
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy

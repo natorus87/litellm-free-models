@@ -6,27 +6,27 @@ labels: bug
 assignees: ""
 ---
 
-## Beschreibung
+## Description
 
-Was ist passiert? Was hast du erwartet?
+What happened? What did you expect?
 
-## Reproduktion
+## Reproduction
 
-Minimale Schritte, um den Bug zu reproduzieren:
+Minimal steps to reproduce the bug:
 
 1. `git checkout <commit>`
-2. `cp .env.example .env` (Keys gesetzt: …)
+2. `cp .env.example .env` (keys set: …)
 3. `make docker-compose-up`
 4. `curl -X POST http://localhost:4000/v1/chat/completions -d '…'`
-5. Siehe Fehler: …
+5. See error: …
 
-## Erwartetes Verhalten
+## Expected Behavior
 
-Was sollte passieren?
+What should happen?
 
-## Tatsächliches Verhalten
+## Actual Behavior
 
-Was passiert tatsächlich? (Fehlermeldung, Stacktrace, HTTP-Status, etc.)
+What actually happens? (error message, stack trace, HTTP status, etc.)
 
 ## Logs
 
@@ -34,25 +34,25 @@ Was passiert tatsächlich? (Fehlermeldung, Stacktrace, HTTP-Status, etc.)
 docker logs litellm-free-models 2>&1 | tail -100
 ```
 
-oder
+or
 
 ```
 kubectl logs -n litellm-free-models deploy/litellm-free-models
 ```
 
-> **WICHTIG: Keine API-Keys posten!** Vor dem Posten mit
-> `sed -E 's/(KEY=).+/\1***REDACTED***/' .env` oder ähnlich bereinigen.
+> **IMPORTANT: Never post API keys!** Sanitize before posting with
+> `sed -E 's/(KEY=).+/\1***REDACTED***/' .env` or similar.
 
-## Umgebung
+## Environment
 
-- **Python-Version:** (Output von `python3 --version`)
+- **Python version:** (output of `python3 --version`)
 - **OS:** (Ubuntu 22.04, macOS 15, …)
-- **Deployment-Art:** Single-Instance (Docker Compose / Kubernetes) oder
-  Multi-Instance (Master + Slaves)
-- **LiteLLM-Version:** (Output von `docker exec litellm-free-models pip show litellm | grep Version`)
-- **Betroffener Provider:** (OpenRouter, Cerebras, …)
-- **Betroffenes Modell:** (gpt-oss-120b, llama-3.3-70b-instruct, …)
+- **Deployment type:** single instance (Docker Compose / Kubernetes) or
+  multi-instance (master + slaves)
+- **LiteLLM version:** (output of `docker exec litellm-free-models pip show litellm | grep Version`)
+- **Affected provider:** (OpenRouter, Cerebras, …)
+- **Affected model:** (gpt-oss-120b, llama-3.3-70b-instruct, …)
 
-## Zusätzlicher Kontext
+## Additional Context
 
-Sonstige Hinweise, Screenshots, verwandte Issues, etc.
+Other notes, screenshots, related issues, etc.

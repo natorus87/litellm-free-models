@@ -1,4 +1,4 @@
-"""Tests fuer render-config.py."""
+"""Tests for render-config.py."""
 import tempfile
 import textwrap
 import unittest
@@ -58,8 +58,9 @@ class TestSubstitutePlaceholders(unittest.TestCase):
         text, missing = rc.substitute_placeholders(
             "{{VALID}} {{_UNDER}} {{123abc}}", {"VALID": "v", "_UNDER": "u"}
         )
-        # "123abc" matcht nicht das Pattern ([A-Z_][A-Z0-9_]*) -- das Pattern
-        # verlangt als erstes Zeichen [A-Z_] (kein digit), bleibt also literal
+        # "123abc" doesn't match the pattern ([A-Z_][A-Z0-9_]*) -- the
+        # pattern requires [A-Z_] as the first char (no digit), so it
+        # stays literal
         self.assertEqual(text, "v u {{123abc}}")
 
 
@@ -84,7 +85,7 @@ class TestProviderFromBlock(unittest.TestCase):
         )
 
     def test_nvidia_with_vendor(self):
-        # 'openai/meta/llama-...'+NVIDIA-Base = NVIDIA
+        # 'openai/meta/llama-...'+NVIDIA base = NVIDIA
         self.assertEqual(
             rc._provider_from_block("openai/meta/llama-3.1-8b-instruct",
                                     "https://integrate.api.nvidia.com/v1"),
@@ -92,7 +93,7 @@ class TestProviderFromBlock(unittest.TestCase):
         )
 
     def test_ovhcloud_github_disambiguation(self):
-        # 'openai/Meta-Llama-...' ohne vendor_in_path: api_base entscheidet
+        # 'openai/Meta-Llama-...' without vendor_in_path: api_base decides
         self.assertEqual(
             rc._provider_from_block("openai/Meta-Llama-3.3-70B-Instruct",
                                     "https://oai.endpoints.kepler.ai.cloud.ovh.net/v1"),
@@ -199,7 +200,7 @@ class TestUpdateFallbacks(unittest.TestCase):
         ]
         out = rc.update_fallbacks(lines, len(lines), openrouter_active=False)
         self.assertNotIn("openrouter-free", out[1])
-        # Chain ist nicht leer, sollte erhalten sein
+        # chain isn't empty, should be preserved
         self.assertIn("gpt-oss-20b", out[1])
 
     def test_empty_chain_removed(self):
@@ -208,7 +209,7 @@ class TestUpdateFallbacks(unittest.TestCase):
             '  - {"gpt-oss-120b": ["openrouter-free"]}\n',
         ]
         out = rc.update_fallbacks(lines, len(lines), openrouter_active=False)
-        # Chain ist leer (nur openrouter-free rausgenommen), Zeile wird leer
+        # chain is empty (only openrouter-free removed), line becomes empty
         self.assertEqual(out[1], "")
 
 
@@ -230,7 +231,7 @@ class TestRemoveOrphanedFallbacks(unittest.TestCase):
             '  - {"*": ["x"]}\n',
         ]
         out = rc.remove_orphaned_fallbacks(lines, {"gpt-oss-120b"})
-        # 'deleted-model' Zeile raus
+        # 'deleted-model' line is gone
         content = "".join(out)
         self.assertNotIn("deleted-model", content)
         self.assertIn("gpt-oss-120b", content)
@@ -238,11 +239,11 @@ class TestRemoveOrphanedFallbacks(unittest.TestCase):
 
 
 class TestAtomicWrite(unittest.TestCase):
-    """Sicherstellen, dass render() bei Crash keine kaputte config.yaml hinterlaesst."""
+    """Make sure render() doesn't leave a broken config.yaml behind on crash."""
 
     def test_writes_only_after_tmp_complete(self):
-        # In einem temp-Dir rendern und pruefen, dass output_path existiert
-        # und keine .tmp/.bak Leichen uebrigbleiben
+        # Render into a temp dir and check that output_path exists and no
+        # .tmp/.bak leftovers remain
         with tempfile.TemporaryDirectory() as d:
             tmpl = Path(d) / "tmpl.yaml"
             env_p = Path(d) / ".env"
@@ -261,18 +262,18 @@ class TestAtomicWrite(unittest.TestCase):
             rc.render(tmpl, env_p, out)
             self.assertTrue(out.exists())
             self.assertIn("test-key", out.read_text())
-            # .tmp darf nicht uebrigbleiben
+            # no leftover .tmp
             self.assertFalse(out.with_suffix(out.suffix + ".tmp").exists())
 
     def test_existing_output_preserved_on_write(self):
-        """render() darf die existierende output_path NICHT verschieben/loeschen
-        bevor das Tmp fertig geschrieben ist (kein Datenverlust-Fenster)."""
+        """render() must NOT move/delete the existing output_path before
+        the tmp file is fully written (no data-loss window)."""
         with tempfile.TemporaryDirectory() as d:
             tmpl = Path(d) / "tmpl.yaml"
             env_p = Path(d) / ".env"
             out = Path(d) / "out.yaml"
 
-            # Existierende output
+            # existing output
             out.write_text("EXISTING CONTENT\n")
             self.assertTrue(out.exists())
 
@@ -280,14 +281,14 @@ class TestAtomicWrite(unittest.TestCase):
             env_p.write_text("OPENROUTER_API_KEY=k\n")
 
             rc.render(tmpl, env_p, out)
-            # Neue Inhalte sind drin
+            # new content is in there
             self.assertIn("model_list", out.read_text())
-            # Backup existiert und enthaelt den ALTEN Inhalt (Sicherung der
-            # vorherigen Version, nicht eine Kopie der neuen)
+            # backup exists and contains the OLD content (a backup of the
+            # previous version, not a copy of the new one)
             backups = list(Path(d).glob("out.yaml.bak.*"))
             self.assertEqual(len(backups), 1)
             self.assertIn("EXISTING CONTENT", backups[0].read_text())
-            # .tmp darf nicht uebrigbleiben
+            # no leftover .tmp
             self.assertFalse(out.with_suffix(out.suffix + ".tmp").exists())
 
 
@@ -328,18 +329,18 @@ class TestEndToEndRender(unittest.TestCase):
                 """))
             env_p.write_text(
                 "OPENROUTER_API_KEY=test-or\n"
-                "CEREBRAS_API_KEY=\n"  # leer -> cerebras-Block raus
+                "CEREBRAS_API_KEY=\n"  # empty -> cerebras block is removed
             )
 
             rc.render(tmpl, env_p, out)
             content = out.read_text()
             self.assertIn("test-or", content)
             self.assertNotIn("cerebras/gpt-oss-120b", content)
-            # Fallback-Chain sollte "llama-3.1-8b" noch enthalten
+            # fallback chain should still contain "llama-3.1-8b"
             self.assertIn("llama-3.1-8b", content)
-            # Ziele ohne existierendes model_name werden entfernt
+            # targets without a matching model_name are removed
             self.assertNotIn("does-not-exist", content)
-            # OPENROUTER_API_KEY ist gesetzt -> openrouter-free wird angehaengt
+            # OPENROUTER_API_KEY is set -> openrouter-free is appended
             self.assertIn("openrouter-free", content)
 
 

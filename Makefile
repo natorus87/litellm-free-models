@@ -8,9 +8,9 @@
         validate-manifests backup-db restore-db lint format lint-fix \
         pre-commit-run install-dev
 
-# Gepinnte LiteLLM-Version (statt wanderndem main-latest Tag).
-# Muss mit docker-compose.yaml, Dockerfile und den K8s-Deployments
-# uebereinstimmen; Updates via Renovate/Dependabot oder manuell.
+# Pinned LiteLLM version (instead of the drifting main-latest tag).
+# Must match docker-compose.yaml, Dockerfile, and the K8s deployments;
+# update via Renovate/Dependabot or manually.
 LITELLM_IMAGE ?= ghcr.io/berriai/litellm:v1.92.0
 
 help: ## Show this help
@@ -19,10 +19,10 @@ help: ## Show this help
 
 # ─── Onboarding ─────────────────────────────────────────────────────────────
 
-onboard: ## Interaktives Setup: .env, API-Keys, Key-Check, Render, Compose-Start
+onboard: ## Interactive setup: .env, API keys, key check, render, compose start
 	@python3 onboard.py
 
-# ─── Config-Render-Pipeline ─────────────────────────────────────────────────
+# ─── Config render pipeline ─────────────────────────────────────────────────
 
 render-config: ## Render config.template.yaml -> config.yaml
 	@python3 render-config.py
@@ -30,7 +30,7 @@ render-config: ## Render config.template.yaml -> config.yaml
 render-config-dry: ## Dry-run render (no writes)
 	@python3 render-config.py --dry-run
 
-render-config-no-redis: ## Render config.yaml WITHOUT Redis (standalone runs ohne Redis-Container)
+render-config-no-redis: ## Render config.yaml WITHOUT Redis (standalone runs without a Redis container)
 	@python3 render-config.py --no-redis
 
 k8s-configmap: render-config ## Regenerate k8s/configmap.yaml from rendered config.yaml
@@ -39,18 +39,18 @@ import sys; \
 c = open('config.yaml').read(); \
 indented = '    ' + c.replace(chr(10), chr(10) + '    ').rstrip('    ') + chr(10); \
 out = 'apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: litellm-config\n  namespace: litellm-free-models\n  labels:\n    app.kubernetes.io/name: litellm-free-models\n    app.kubernetes.io/component: proxy\ndata:\n  config.yaml: |\n' + indented; \
-open('k8s/configmap.yaml', 'w').write(out)" 
-	@echo "k8s/configmap.yaml aktualisiert ($$(wc -l < k8s/configmap.yaml) Zeilen)"
+open('k8s/configmap.yaml', 'w').write(out)"
+	@echo "k8s/configmap.yaml updated ($$(wc -l < k8s/configmap.yaml) lines)"
 
 # ─── Docker ─────────────────────────────────────────────────────────────────
 
 docker-build: ## Build the custom Docker image
 	docker build -t litellm-free-models .
 
-# Standalone-Run ohne Compose-Stack: es gibt kein erreichbares Redis, daher
-# wird die Config bewusst OHNE Redis-Bloecke gerendert (und REDIS_HOST aus
-# .env neutralisiert). Fuer den vollen Stack: make docker-compose-up.
-docker-run: render-config-no-redis docker-build ## Run standalone with Docker (ohne Redis)
+# Standalone run without the Compose stack: there's no reachable Redis, so
+# the config is deliberately rendered WITHOUT Redis blocks (and REDIS_HOST
+# is neutralized). For the full stack: make docker-compose-up.
+docker-run: render-config-no-redis docker-build ## Run standalone with Docker (without Redis)
 	docker run -d \
 		--name litellm-free-models \
 		-p 4000:4000 \
@@ -75,11 +75,11 @@ docker-logs: ## Follow logs
 k8s-namespace: ## Create namespace
 	kubectl apply -f k8s/namespace.yaml
 
-# Explizite Allowlist der Keys, die in das litellm-secrets K8s-Secret
-# gehoeren. Verhindert, dass lokale Zusatzvariablen aus .env im
-# Cluster-Secret landen. REDIS_* ist bewusst NICHT enthalten:
-# REDIS_HOST/PORT werden im Deployment statisch gesetzt, REDIS_PASSWORD
-# fliesst ausschliesslich ueber litellm-redis-secret (Single Source).
+# Explicit allowlist of the keys that belong in the litellm-secrets K8s
+# secret. Prevents local extra variables from .env leaking into the
+# cluster secret. REDIS_* is deliberately NOT included: REDIS_HOST/PORT
+# are set statically in the deployment, REDIS_PASSWORD flows exclusively
+# through litellm-redis-secret (single source).
 K8S_SECRET_KEYS := LITELLM_MASTER_KEY OPENROUTER_API_KEY CEREBRAS_API_KEY \
 	GROQ_API_KEY CLOUDFLARE_API_KEY CLOUDFLARE_API_BASE NVIDIA_API_KEY \
 	GEMINI_API_KEY MISTRAL_API_KEY COHERE_API_KEY GITHUB_TOKEN \
@@ -96,7 +96,7 @@ k8s-secret: env-check k8s-namespace ## Create K8s secrets from .env (litellm-sec
 	@echo "Creating litellm-redis-secret from .env (REDIS_PASSWORD)..."
 	@REDIS_PASSWORD=$$(grep -E '^REDIS_PASSWORD=' .env | head -1 | cut -d= -f2-); \
 	if [ -z "$$REDIS_PASSWORD" ]; then \
-		echo "ERROR: REDIS_PASSWORD fehlt/leer in .env (openssl rand -hex 16)"; \
+		echo "ERROR: REDIS_PASSWORD missing/empty in .env (openssl rand -hex 16)"; \
 		exit 1; \
 	fi; \
 	kubectl create secret generic litellm-redis-secret \
@@ -106,7 +106,7 @@ k8s-secret: env-check k8s-namespace ## Create K8s secrets from .env (litellm-sec
 	@echo "Creating litellm-postgres-secret from .env (POSTGRES_PASSWORD)..."
 	@POSTGRES_PASSWORD=$$(grep -E '^POSTGRES_PASSWORD=' .env | head -1 | cut -d= -f2-); \
 	if [ -z "$$POSTGRES_PASSWORD" ]; then \
-		echo "ERROR: POSTGRES_PASSWORD fehlt/leer in .env (openssl rand -hex 16)"; \
+		echo "ERROR: POSTGRES_PASSWORD missing/empty in .env (openssl rand -hex 16)"; \
 		exit 1; \
 	fi; \
 	kubectl create secret generic litellm-postgres-secret \
@@ -158,13 +158,13 @@ k8s-restart: ## Rollout restart
 
 # ─── Utilities ──────────────────────────────────────────────────────────────
 
-# Validiert die gerenderte Config, indem LiteLLM sie tatsaechlich bootet und
-# /health/readiness abgefragt wird. Gerendert wird OHNE Redis-Bloecke in eine
-# separate Datei (config.check.yaml), damit die Validierung weder ein
-# laufendes Redis braucht noch die echte config.yaml anfasst.
-# Port 4010, um nicht mit einem lokal laufenden Proxy zu kollidieren.
+# Validates the rendered config by actually booting LiteLLM against it and
+# querying /health/readiness. Rendered WITHOUT Redis blocks into a separate
+# file (config.check.yaml), so validation needs neither a running Redis nor
+# touches the real config.yaml. Port 4010, to avoid colliding with a
+# locally running proxy.
 check-config: ## Validate config by booting LiteLLM against a Redis-less render
-	@echo "Rendering validation config (ohne Redis) ..."
+	@echo "Rendering validation config (without Redis) ..."
 	@python3 render-config.py --no-redis --output config.check.yaml
 	@docker rm -f litellm-config-check >/dev/null 2>&1 || true
 	@echo "Booting LiteLLM ($(LITELLM_IMAGE)) ..."
@@ -183,16 +183,16 @@ check-config: ## Validate config by booting LiteLLM against a Redis-less render
 	if [ $$ok -eq 0 ]; then \
 		echo "OK: config valid (/health/readiness healthy)"; \
 	else \
-		echo "FEHLER: LiteLLM wurde mit dieser Config nicht ready. Logs:"; \
+		echo "ERROR: LiteLLM did not become ready with this config. Logs:"; \
 		docker logs --tail 50 litellm-config-check 2>&1 || true; \
 	fi; \
 	docker rm -f litellm-config-check >/dev/null 2>&1 || true; \
 	rm -f config.check.yaml; \
 	exit $$ok
 
-# Validiert beide Compose-Dateien (Interpolation + Syntax) und, falls
-# kubeconform installiert ist, alle K8s-Manifeste. Fehlende per-Instanz-
-# .env-Dateien werden temporaer aus den Examples erzeugt.
+# Validates both Compose files (interpolation + syntax) and, if kubeconform
+# is installed, all K8s manifests. Missing per-instance .env files are
+# generated temporarily from the examples.
 validate-manifests: ## Validate Compose files and K8s manifests
 	@echo "── docker-compose.yaml ──"
 	@REDIS_PASSWORD=dummy POSTGRES_PASSWORD=dummy \
@@ -210,20 +210,20 @@ validate-manifests: ## Validate Compose files and K8s manifests
 	rc=$$?; \
 	for f in $$created; do rm -f $$f; done; \
 	test $$rc -eq 0 && echo "OK"
-	@echo "── K8s-Manifeste ──"
+	@echo "── K8s manifests ──"
 	@if command -v kubeconform >/dev/null 2>&1; then \
 		find k8s multi-instance/k8s -name '*.yaml' \
 			! -name '*.template' ! -name 'kustomization.yaml' -print0 \
 			| xargs -0 kubeconform -strict -summary; \
 	else \
-		echo "kubeconform nicht installiert – uebersprungen (CI validiert immer)"; \
+		echo "kubeconform not installed – skipped (CI always validates)"; \
 	fi
 
 env-check: ## Check if .env file exists
 	@test -f .env || (echo "ERROR: .env file not found! Copy .env.example to .env and fill in your keys." && exit 1)
 	@echo ".env file found."
 
-# ─── Code-Qualität ──────────────────────────────────────────────────────────
+# ─── Code quality ───────────────────────────────────────────────────────────
 
 RUFF ?= $(shell command -v ruff 2>/dev/null || echo "python3 -m ruff")
 
@@ -245,8 +245,8 @@ install-dev: ## Install dev dependencies and pre-commit hooks
 
 # ─── Tests ──────────────────────────────────────────────────────────────────
 
-# WICHTIG: kein `| tail` hier – die Pipe wuerde den unittest-Exit-Code
-# verschlucken und fehlschlagende Tests liessen make/CI gruen durchlaufen.
+# IMPORTANT: no `| tail` here – the pipe would swallow the unittest exit
+# code and let failing tests slip make/CI through green.
 test: ## Run unit tests (render-config, find-shared-models, providers_config, multi-instance)
 	@python3 -m unittest discover -s tests -v
 
@@ -259,22 +259,22 @@ backup-db: ## Dump the Compose Postgres DB (virtual keys, spend logs) to ./backu
 	@mkdir -p backups
 	@docker exec litellm-postgres pg_dump -U litellm -d litellm -F c \
 		> backups/litellm-$$(date +%Y%m%d-%H%M%S).dump
-	@echo "Backup geschrieben:"; ls -lht backups/ | head -3
+	@echo "Backup written:"; ls -lht backups/ | head -3
 
 restore-db: ## Restore the newest dump from ./backups/ into the Compose Postgres
 	@latest=$$(ls -1t backups/litellm-*.dump 2>/dev/null | head -1); \
-	if [ -z "$$latest" ]; then echo "Kein Dump in ./backups/ gefunden"; exit 1; fi; \
-	echo "Restore aus $$latest ..."; \
+	if [ -z "$$latest" ]; then echo "No dump found in ./backups/"; exit 1; fi; \
+	echo "Restoring from $$latest ..."; \
 	docker exec -i litellm-postgres pg_restore -U litellm -d litellm --clean < "$$latest"
 
-# ─── Client-Integration ─────────────────────────────────────────────────────
+# ─── Client integration ─────────────────────────────────────────────────────
 
-opencode-config: ## Provider-Eintrag in ~/.config/opencode/opencode.json anlegen/aktualisieren
+opencode-config: ## Create/update the litellm provider entry in ~/.config/opencode/opencode.json
 	@python3 opencode-config.py
 
 # ─── Housekeeping ───────────────────────────────────────────────────────────
 
-clean: ## Remove generated/temporary files (Backups, Reports, Caches)
+clean: ## Remove generated/temporary files (backups, reports, caches)
 	rm -f config.yaml.bak.* config.yaml.tmp config.check.yaml .env.k8s.tmp
 	rm -f multi-instance/master/config.yaml.bak.* multi-instance/master/config.yaml.tmp
 	rm -f providers-overlap.txt

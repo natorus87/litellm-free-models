@@ -1,9 +1,9 @@
 version: 2
 updates:
-  # Basis-Image im Dockerfile (gepinnter LiteLLM-Tag). Compose-/K8s-Manifeste
-  # kann Dependabot nicht bumpen – bei einem Update-PR den Tag auch in
-  # docker-compose.yaml, multi-instance/ und k8s/ nachziehen (siehe Makefile
-  # LITELLM_IMAGE).
+  # Base image in the Dockerfile (pinned LiteLLM tag). Dependabot can't
+  # bump Compose/K8s manifests – when an update PR lands, also update the
+  # tag in docker-compose.yaml, multi-instance/, and k8s/ (see the
+  # Makefile's LITELLM_IMAGE).
   - package-ecosystem: "docker"
     directory: "/"
     schedule:

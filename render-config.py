@@ -1,25 +1,25 @@
 #!/usr/bin/env python3
 """
-Rendert config.template.yaml zu config.yaml.
+Renders config.template.yaml into config.yaml.
 
-  1. Liest .env und ersetzt {{ENV_VAR}} Platzhalter im Template.
-  2. Filtert Provider-Deployments raus, deren API-Key fehlt (ausser
-     anonymer Free-Tier wie OVHcloud).
-  3. Entfernt die Redis-Bloecke (Cache + Router-Tracking, markiert mit
-     `# BEGIN REDIS ...` / `# END REDIS ...`), wenn REDIS_HOST fehlt/leer
-     ist oder --no-redis gesetzt wurde.
-  4. Wenn OPENROUTER_API_KEY gesetzt ist, wird `openrouter-free` an jede
-     Fallback-Chain und an den Catch-All `*` angehaengt.
-  5. Entfernt Fallback-Eintraege UND Chain-Ziele, die auf nicht (mehr)
-     existierende model_names zeigen.
-  6. Schreibt config.yaml atomar mit .bak.<timestamp>-Backup der vorherigen
-     Version (es werden maximal BACKUP_KEEP Backups behalten).
+  1. Reads .env and substitutes {{ENV_VAR}} placeholders in the template.
+  2. Filters out provider deployments whose API key is missing (except for
+     the anonymous free tier like OVHcloud).
+  3. Removes the Redis blocks (cache + router tracking, marked with
+     `# BEGIN REDIS ...` / `# END REDIS ...`) if REDIS_HOST is missing/empty
+     or --no-redis was passed.
+  4. If OPENROUTER_API_KEY is set, appends `openrouter-free` to every
+     fallback chain and to the catch-all `*`.
+  5. Removes fallback entries AND chain targets that point to model_names
+     that no longer exist.
+  6. Writes config.yaml atomically with a .bak.<timestamp> backup of the
+     previous version (at most BACKUP_KEEP backups are kept).
 
-Nutzung:
+Usage:
     python3 render-config.py
     python3 render-config.py --env .env --template config.template.yaml
-    python3 render-config.py --dry-run   # nur stdout, kein Schreiben
-    python3 render-config.py --no-redis  # ohne Cache/Router-Redis rendern
+    python3 render-config.py --dry-run   # stdout only, no writes
+    python3 render-config.py --no-redis  # render without cache/router Redis
 """
 
 from __future__ import annotations
@@ -38,18 +38,17 @@ DEFAULT_ENV = REPO_ROOT / ".env"
 DEFAULT_TEMPLATE = REPO_ROOT / "config.template.yaml"
 DEFAULT_OUTPUT = REPO_ROOT / "config.yaml"
 
-# Maximale Anzahl Zeilen, die als Block-Header rueckwaerts vor einem
-# Deployment-Eintrag gesucht werden. Realer Bedarf im aktuellen Template
-# sind 3-4 Header-Zeilen; 12 ist grosszuegig bemessen, um auch bei
-# zukuenftigen Erweiterungen robust zu sein.
+# Maximum number of lines to search backwards for a block header before a
+# deployment entry. Actual need in the current template is 3-4 header
+# lines; 12 is generously sized to stay robust for future additions too.
 MAX_HEADER_LINES = 12
 
-# Anzahl der config.yaml.bak.<timestamp>-Backups, die beim Rendern
-# aufgehoben werden; aeltere werden geloescht.
+# Number of config.yaml.bak.<timestamp> backups kept when rendering;
+# older ones get deleted.
 BACKUP_KEEP = 5
 
-# model_names, die bewusst nur einen Provider haben (dokumentierte Ausnahmen
-# der >= 2-Provider-Regel) -- fuer diese wird KEINE Warnung ausgegeben.
+# model_names that deliberately have only one provider (documented
+# exceptions to the >= 2-provider rule) -- NO warning is emitted for these.
 SINGLE_PROVIDER_ALLOWED = {"big-pickle", "north-mini-code", "openrouter-free"}
 
 
@@ -68,21 +67,21 @@ def load_env(path: Path) -> dict[str, str]:
 
 def _provider_from_block(model_id: str, api_base: str) -> str:
     """
-    Leitet den internen Provider-Namen aus (model, api_base) ab.
+    Derives the internal provider name from (model, api_base).
 
-    Diskrimination ist notwendig weil mehrere Provider das Praefix
-    'openai' benutzen:
-      - NVIDIA:        'openai/<vendor>/<model>' mit NVIDIA-API-Base
-      - GitHub Models: 'openai/<ModelName>' (z.B. 'openai/Meta-Llama-...')
-                       mit Azure-API-Base
-      - OVHcloud:      'openai/<ModelName>' mit OVHcloud-API-Base
-      - OpenCode Zen:  'openai/<model>' mit opencode.ai-Base
-      - LLM7.io:       'openai/<model>' mit llm7.io-Base
+    Discrimination is necessary because several providers use the
+    'openai' prefix:
+      - NVIDIA:        'openai/<vendor>/<model>' with the NVIDIA API base
+      - GitHub Models: 'openai/<ModelName>' (e.g. 'openai/Meta-Llama-...')
+                       with the Azure API base
+      - OVHcloud:      'openai/<ModelName>' with the OVHcloud API base
+      - OpenCode Zen:  'openai/<model>' with the opencode.ai base
+      - LLM7.io:       'openai/<model>' with the llm7.io base
 
-    Wenn `model:` allein nicht eindeutig ist, wird `api_base` als
-    Sekundaer-Diskriminator genutzt.
+    If `model:` alone isn't unambiguous, `api_base` is used as a secondary
+    discriminator.
 
-    Beispiele:
+    Examples:
       openrouter/openai/gpt-oss-120b:free         -> openrouter
       cerebras/gpt-oss-120b                       -> cerebras
       openai/openai/gpt-oss-120b                  -> nvidia
@@ -100,29 +99,29 @@ def _provider_from_block(model_id: str, api_base: str) -> str:
                 return name
         return ""
 
-    # OpenAI-kompatibel. Erst Versuch via Vendor:
+    # OpenAI-compatible. First try via vendor:
     vendor = parts[1] if len(parts) >= 2 else ""
     if vendor == "openai":
         return "nvidia"
     if vendor and vendor in PROVIDERS:
         return vendor
 
-    # Kein eindeutiger Vendor. Diskrimination via api_base.
-    # Wir matchen jeden OpenAI-Provider, dessen api_base_static im Block
-    # vorkommt (Substring, da api_base ggf. mit/ohne Trailing-Slash).
+    # No unambiguous vendor. Discriminate via api_base.
+    # We match any OpenAI provider whose api_base_static appears in the
+    # block (substring, since api_base may or may not have a trailing slash).
     if api_base and not api_base.startswith("{{"):
         candidates: list[tuple[int, str]] = []
         for name, prov in PROVIDERS.items():
             if prov.prefix != "openai" or not prov.api_base_static:
                 continue
             if prov.api_base_static in api_base:
-                # Laengere api_base-URL = spezifischer (z.B. mit Pfad)
+                # Longer api_base URL = more specific (e.g. with a path)
                 candidates.append((len(prov.api_base_static), name))
         if candidates:
             candidates.sort(reverse=True)
             return candidates[0][1]
 
-    # Letzter Fallback: erster OpenAI-Provider ohne vendor_in_path
+    # Last resort: first OpenAI provider without vendor_in_path
     for name, prov in PROVIDERS.items():
         if prov.prefix == "openai" and not prov.vendor_in_path:
             return name
@@ -131,9 +130,9 @@ def _provider_from_block(model_id: str, api_base: str) -> str:
 
 def parse_blocks(lines: list[str]) -> tuple[int, int, list[dict]]:
     """
-    Liefert (model_list_start, model_list_end, [Deployment-Block]).
-    Ein Block = ein - model_name: Eintrag mit allen Folge-Zeilen bis zur
-    naechsten - model_name: oder einer Zeile mit weniger als 2-Space-Indent.
+    Returns (model_list_start, model_list_end, [deployment block]).
+    A block = one - model_name: entry with all following lines up to the
+    next - model_name: or a line with less than 2-space indent.
     """
     ml_start = -1
     for i, line in enumerate(lines):
@@ -141,7 +140,7 @@ def parse_blocks(lines: list[str]) -> tuple[int, int, list[dict]]:
             ml_start = i
             break
     if ml_start < 0:
-        raise RuntimeError("model_list nicht gefunden")
+        raise RuntimeError("model_list not found")
 
     ml_end = len(lines)
     for i in range(ml_start + 1, len(lines)):
@@ -168,7 +167,7 @@ def parse_blocks(lines: list[str]) -> tuple[int, int, list[dict]]:
                 blocks.append(current)
             current = {
                 "start": i,
-                "end": i,  # wird am Ende gesetzt
+                "end": i,  # set at the end
                 "lines": [lines[i]],
                 "model_name": s.split("- model_name:", 1)[1].strip(),
                 "provider": "",
@@ -176,7 +175,7 @@ def parse_blocks(lines: list[str]) -> tuple[int, int, list[dict]]:
                 "api_base": "",
             }
         elif current is not None:
-            # Block endet vor einer Zeile mit < 2-Space-Indent (top-level key)
+            # Block ends before a line with < 2-space indent (top-level key)
             if lines[i] and not lines[i].startswith("  "):
                 current["end"] = i - 1
                 _finalize(current)
@@ -186,7 +185,7 @@ def parse_blocks(lines: list[str]) -> tuple[int, int, list[dict]]:
             current["lines"].append(lines[i])
             stripped = lines[i].strip()
             if stripped.startswith("model:") and " " in stripped and not current["model_id"]:
-                # 'model: <praefix>/...' aus der ersten passenden Zeile
+                # 'model: <prefix>/...' from the first matching line
                 mid = stripped.split("model:", 1)[1].strip()
                 current["model_id"] = mid
             elif stripped.startswith("api_base:") and " " in stripped and not current["api_base"]:
@@ -201,8 +200,8 @@ def parse_blocks(lines: list[str]) -> tuple[int, int, list[dict]]:
 
 def filter_blocks(blocks: list[dict], env: dict[str, str]) -> tuple[list[dict], list[str]]:
     """
-    Entfernt Bloecke deren API-Key fehlt.
-    Liefert (gefilterte Bloecke, Liste der entfernten Provider-Keys).
+    Removes blocks whose API key is missing.
+    Returns (filtered blocks, list of removed provider keys).
     """
     kept: list[dict] = []
     removed: list[str] = []
@@ -226,8 +225,8 @@ def filter_blocks(blocks: list[dict], env: dict[str, str]) -> tuple[list[dict], 
 
 def substitute_placeholders(text: str, env: dict[str, str]) -> tuple[str, list[str]]:
     """
-    Ersetzt {{VAR}} durch env[VAR] (oder "" wenn nicht gesetzt).
-    Liefert (neuer_text, liste_der_noch_offenen_platzhalter).
+    Replaces {{VAR}} with env[VAR] (or "" if not set).
+    Returns (new_text, list_of_still_missing_placeholders).
     """
     missing: list[str] = []
 
@@ -243,11 +242,12 @@ def substitute_placeholders(text: str, env: dict[str, str]) -> tuple[str, list[s
 
 def single_deployment_warnings(kept_blocks: list[dict]) -> list[str]:
     """
-    Liefert die model_names, die nach dem Provider-Filter nur noch EIN
-    Deployment haben (ohne die dokumentierten Single-Provider-Ausnahmen).
-    Die >= 2-Provider-Regel gilt nur fuers Template -- fehlen API-Keys,
-    kann ein Modell zur Laufzeit auf einem Bein stehen: faellt der letzte
-    Provider aus (Rate-Limit, Downtime), traegt nur noch die Fallback-Chain.
+    Returns the model_names that have only ONE deployment left after the
+    provider filter (excluding the documented single-provider exceptions).
+    The >= 2-provider rule only applies to the template -- if API keys are
+    missing, a model can end up standing on one leg at runtime: if the
+    last remaining provider fails (rate limit, downtime), only the
+    fallback chain is left to carry the load.
     """
     counts: dict[str, int] = {}
     for b in kept_blocks:
@@ -260,13 +260,13 @@ def single_deployment_warnings(kept_blocks: list[dict]) -> list[str]:
 
 def strip_redis_blocks(lines: list[str], redis_active: bool) -> list[str]:
     """
-    Verarbeitet die mit `# BEGIN REDIS ...` / `# END REDIS ...` markierten
-    Bloecke (Cache in litellm_settings, Redis-Tracking in router_settings):
+    Processes the blocks marked with `# BEGIN REDIS ...` / `# END REDIS ...`
+    (cache in litellm_settings, Redis tracking in router_settings):
 
-    - redis_active=True:  nur die Marker-Zeilen entfernen, Inhalt bleibt.
-    - redis_active=False: Marker UND Inhalt entfernen – der Proxy laeuft
-      dann ohne Redis, statt gegen ein unerreichbares Redis zu degradieren
-      (Connection-Error-Spam auf jedem Request).
+    - redis_active=True:  only remove the marker lines, content stays.
+    - redis_active=False: remove markers AND content -- the proxy then runs
+      without Redis instead of degrading against an unreachable Redis
+      (connection-error spam on every request).
     """
     new_lines: list[str] = []
     in_block = False
@@ -291,14 +291,14 @@ def update_fallbacks(
     valid_model_names: set[str] | None = None,
 ) -> list[str]:
     """
-    - Wenn OPENROUTER_API_KEY gesetzt ist: 'openrouter-free' an jede
-      Fallback-Chain und an den Catch-All '*' anhaengen (idempotent).
-    - Wenn OPENROUTER_API_KEY fehlt: 'openrouter-free' aus allen
-      Fallback-Chains entfernen, damit LiteLLM nicht versucht einen
-      OpenRouter-Aufruf ohne Key zu machen.
-    - Chain-ZIELE, die kein existierendes model_name (mehr) sind, werden
-      entfernt (in fallbacks UND context_window_fallbacks) – sonst wuerde
-      ein Fallback auf ein Modell mit null Deployments zeigen.
+    - If OPENROUTER_API_KEY is set: append 'openrouter-free' to every
+      fallback chain and to the catch-all '*' (idempotent).
+    - If OPENROUTER_API_KEY is missing: remove 'openrouter-free' from all
+      fallback chains, so LiteLLM doesn't try to make an OpenRouter call
+      without a key.
+    - Chain TARGETS that are no longer an existing model_name get removed
+      (in both fallbacks AND context_window_fallbacks) -- otherwise a
+      fallback would point at a model with zero deployments.
     """
     new_lines = list(lines)
 
@@ -340,7 +340,7 @@ def update_fallbacks(
                     items = [x for x in items if x != "openrouter-free"]
 
         if not items:
-            # Chain ist leer, Zeile loeschen
+            # Chain is empty, delete the line
             new_lines[i] = ""
             continue
         new_chain = ", ".join(f'"{x}"' for x in items)
@@ -357,8 +357,8 @@ def remove_orphaned_fallbacks(
     valid_model_names: set[str],
 ) -> list[str]:
     """
-    Entfernt Fallback-Eintraege die auf model_names zeigen, die es in
-    model_list nicht (mehr) gibt.
+    Removes fallback entries that point to model_names that no longer
+    exist in model_list.
     """
     new_lines: list[str] = []
     in_fallbacks = False
@@ -383,7 +383,7 @@ def remove_orphaned_fallbacks(
             if m:
                 key = m.group(1)
                 if key != "*" and key not in valid_model_names:
-                    continue  # verwaist, ueberspringen
+                    continue  # orphaned, skip
         new_lines.append(line)
     return new_lines
 
@@ -396,51 +396,52 @@ def render(
     no_redis: bool = False,
 ) -> int:
     if not template_path.exists():
-        print(f"FEHLER: Template nicht gefunden: {template_path}", file=sys.stderr)
+        print(f"ERROR: template not found: {template_path}", file=sys.stderr)
         return 2
     if not env_path.exists():
-        print(f"FEHLER: .env nicht gefunden: {env_path}", file=sys.stderr)
+        print(f"ERROR: .env not found: {env_path}", file=sys.stderr)
         return 2
 
     env = load_env(env_path)
     text = template_path.read_text(encoding="utf-8")
 
-    # 1) Platzhalter ersetzen
+    # 1) Substitute placeholders
     text, missing = substitute_placeholders(text, env)
     if missing:
-        # Bei OVHcloud etc. ist das OK; bei anderen sollte es den Block-Filter treffen
+        # OK for OVHcloud etc.; for others the block filter should catch it
         pass
 
     lines = text.splitlines(keepends=True)
 
-    # 1b) Redis-Bloecke (Cache + Router-Tracking) konditional entfernen
+    # 1b) Conditionally strip the Redis blocks (cache + router tracking)
     redis_active = bool(env.get("REDIS_HOST")) and not no_redis
     lines = strip_redis_blocks(lines, redis_active)
     if redis_active:
-        print("REDIS_HOST gesetzt -> Redis-Cache + Router-Tracking aktiv.")
+        print("REDIS_HOST set -> Redis cache + router tracking active.")
     else:
-        print("Kein REDIS_HOST (oder --no-redis) -> Redis-Bloecke entfernt "
-              "(Proxy laeuft ohne Cache/instanzuebergreifendes Tracking).")
+        print("No REDIS_HOST (or --no-redis) -> Redis blocks removed "
+              "(proxy runs without cache/cross-instance tracking).")
 
-    # 2) Bloecke parsen + filtern
+    # 2) Parse + filter blocks
     ml_start, ml_end, blocks = parse_blocks(lines)
     kept, removed = filter_blocks(blocks, env)
 
     valid_names = {b["model_name"] for b in kept}
 
     if removed:
-        print(f"Entfernte Provider-Deployments (kein API-Key): {len(removed)}")
+        print(f"Removed provider deployments (no API key): {len(removed)}")
         for r in removed:
             print(f"  - {r}")
 
-    # 3) Entfernte Bloecke (inkl. Header-Kommentare davor) rausnehmen
+    # 3) Strip removed blocks (incl. header comments before them)
     new_lines = list(lines)
     removed_indices: set[int] = set()
     for b in blocks:
         if b in kept:
             continue
-        # Header-Kommentar: Zeilen mit 2-Space-Indent die '#' enthalten,
-        # direkt vor dem Block. Max. MAX_HEADER_LINES Zeilen rueckwaerts suchen.
+        # Header comment: lines with 2-space indent that contain '#',
+        # directly before the block. Search at most MAX_HEADER_LINES lines
+        # backwards.
         header_start = b["start"]
         for j in range(b["start"] - 1, max(b["start"] - MAX_HEADER_LINES, ml_start), -1):
             line = new_lines[j]
@@ -448,7 +449,7 @@ def render(
                 continue
             stripped = line.strip()
             if not stripped:
-                continue  # Leerzeile, nicht in Header-Definition
+                continue  # blank line, not part of the header
             if stripped.startswith("#") and line.startswith("  "):
                 header_start = j
             else:
@@ -457,8 +458,8 @@ def render(
             removed_indices.add(j)
     new_lines = [ln for i, ln in enumerate(new_lines) if i not in removed_indices]
 
-    # 4) ml_end neu berechnen (durch Bloecke-Entfernung verschoben sich Indizes)
-    #    Wir suchen wieder nach 'model_list:' und dem ersten top-level-Key danach
+    # 4) Recompute ml_end (indices shifted because blocks were removed).
+    #    Search again for 'model_list:' and the first top-level key after it.
     new_ml_start = -1
     for i, line in enumerate(new_lines):
         if line.rstrip() == "model_list:" and not line.startswith(" "):
@@ -471,58 +472,58 @@ def render(
             new_ml_end = i
             break
 
-    # 5) Fallback-Chains bereinigen + OpenRouter-Free ergaenzen
-    #    (remove_orphaned_fallbacks: verwaiste KEYS; update_fallbacks:
-    #     verwaiste ZIELE + openrouter-free an/aus)
+    # 5) Clean up fallback chains + add openrouter-free
+    #    (remove_orphaned_fallbacks: orphaned KEYS; update_fallbacks:
+    #     orphaned TARGETS + openrouter-free on/off)
     new_lines = remove_orphaned_fallbacks(new_lines, valid_names)
     openrouter_active = bool(env.get("OPENROUTER_API_KEY"))
     new_lines = update_fallbacks(
         new_lines, new_ml_end, openrouter_active, valid_model_names=valid_names
     )
 
-    # 6) Valid model_names-Liste ausgeben
-    print(f"Behaltene Deployments: {len(kept)}")
-    print(f"Verfuegbare model_names: {len(valid_names)}")
+    # 6) Print the valid model_names list
+    print(f"Kept deployments: {len(kept)}")
+    print(f"Available model_names: {len(valid_names)}")
 
     singles = single_deployment_warnings(kept)
     if singles:
-        print(f"WARNUNG: {len(singles)} model_name(s) haben nach dem "
-              f"Provider-Filter nur noch 1 Deployment (keine "
-              f"Provider-Redundanz; bei Ausfall traegt nur die Fallback-Chain):")
+        print(f"WARNING: {len(singles)} model_name(s) have only 1 deployment "
+              f"left after the provider filter (no provider redundancy; "
+              f"if it fails, only the fallback chain carries the load):")
         for mn in singles:
             print(f"  ! {mn}")
-        print("  -> Fehlende API-Keys in .env ergaenzen, um Redundanz "
-              "wiederherzustellen (siehe .env.example).")
+        print("  -> Add the missing API key(s) to .env to restore "
+              "redundancy (see .env.example).")
     if openrouter_active:
-        print("OPENROUTER_API_KEY gesetzt -> 'openrouter-free' wird an alle Fallback-Chains angehaengt.")
+        print("OPENROUTER_API_KEY set -> 'openrouter-free' is appended to all fallback chains.")
     else:
-        print("OPENROUTER_API_KEY fehlt -> 'openrouter-free' wird NICHT als Fallback eingebaut.")
+        print("OPENROUTER_API_KEY missing -> 'openrouter-free' is NOT added as a fallback.")
 
     if dry_run:
-        print("\n--- DRY-RUN: erste 40 Zeilen der generierten config.yaml ---")
+        print("\n--- DRY RUN: first 40 lines of the generated config.yaml ---")
         for ln in new_lines[:40]:
             print(ln, end="")
         print("---")
         return 0
 
-    # Header ersetzen: der Template-Warn-Block ("DIESE DATEI IST DIE SINGLE
-    # SOURCE OF TRUTH") soll nicht in der gerenderten config.yaml landen.
+    # Replace the header: the template warning block ("THIS FILE IS THE
+    # SINGLE SOURCE OF TRUTH") shouldn't end up in the rendered config.yaml.
     rendered = "".join(new_lines)
     rendered = re.sub(
-        r"^# =+\n# LiteLLM Proxy Configuration.*?# =+\n# DIESE DATEI.*?# =+\n",
+        r"^# =+\n# LiteLLM Proxy Configuration.*?# =+\n# THIS FILE.*?# =+\n",
         ("# =============================================================================\n"
          "# LiteLLM Proxy Configuration – Free Models Only\n"
          "# =============================================================================\n"
-         "# GERENDERT aus config.template.yaml via render-config.py.\n"
-         "# Direkte Edits an config.yaml werden beim naechsten Render ueberschrieben.\n"
+         "# RENDERED from config.template.yaml via render-config.py.\n"
+         "# Direct edits to config.yaml are overwritten on the next render.\n"
          "# =============================================================================\n"),
         rendered,
         count=1,
         flags=re.DOTALL | re.MULTILINE,
     )
 
-    # 7) Backup der ALTEN Version (falls vorhanden), dann atomic write:
-    #    erst tmp schreiben, dann os.replace() (atomar auf POSIX).
+    # 7) Backup the OLD version (if any), then atomic write: write to tmp
+    #    first, then os.replace() (atomic on POSIX).
     if output_path.exists():
         backup = output_path.with_suffix(output_path.suffix + f".bak.{int(time.time())}")
         import shutil
@@ -535,12 +536,12 @@ def render(
 
     prune_backups(output_path)
 
-    print(f"config.yaml geschrieben: {output_path} ({rendered.count(chr(10))} Zeilen)")
+    print(f"config.yaml written: {output_path} ({rendered.count(chr(10))} lines)")
     return 0
 
 
 def prune_backups(output_path: Path, keep: int = BACKUP_KEEP) -> None:
-    """Loescht alte <output>.bak.<timestamp>-Backups, behaelt die letzten `keep`."""
+    """Deletes old <output>.bak.<timestamp> backups, keeping the last `keep`."""
     pattern = output_path.name + ".bak.*"
     backups = sorted(
         output_path.parent.glob(pattern),
@@ -549,7 +550,7 @@ def prune_backups(output_path: Path, keep: int = BACKUP_KEEP) -> None:
     for old in backups[:-keep] if keep else backups:
         try:
             old.unlink()
-            print(f"Altes Backup geloescht: {old.name}")
+            print(f"Old backup removed: {old.name}")
         except OSError:
             pass
 
@@ -563,11 +564,11 @@ def main() -> int:
     ap.add_argument("--template", type=Path, default=DEFAULT_TEMPLATE)
     ap.add_argument("--output", type=Path, default=DEFAULT_OUTPUT)
     ap.add_argument("--dry-run", action="store_true",
-                    help="Nur Diff/Preview anzeigen, nicht schreiben")
+                    help="Only show the diff/preview, don't write")
     ap.add_argument("--no-redis", action="store_true",
-                    help="Redis-Bloecke (Cache + Router-Tracking) entfernen, "
-                         "auch wenn REDIS_HOST gesetzt ist (fuer Standalone-"
-                         "Runs ohne Redis, z.B. make check-config)")
+                    help="Remove Redis blocks (cache + router tracking), "
+                         "even if REDIS_HOST is set (for standalone runs "
+                         "without Redis, e.g. make check-config)")
     args = ap.parse_args()
     return render(args.template, args.env, args.output,
                   dry_run=args.dry_run, no_redis=args.no_redis)

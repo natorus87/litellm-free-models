@@ -1,4 +1,4 @@
-"""Tests fuer providers_config.py."""
+"""Tests for providers_config.py."""
 import unittest
 
 from providers_config import PROVIDERS, ProviderConfig, get
@@ -17,22 +17,22 @@ class TestProviderConfigShape(unittest.TestCase):
                 self.assertIn(p.prefix, {"openrouter", "cerebras", "groq",
                                           "cloudflare", "gemini", "openai",
                                           "mistral", "cohere", "huggingface"})
-                # Entweder env_var oder anonymous (required=False)
+                # Either env_var or anonymous (required=False)
                 if p.required:
                     self.assertIsNotNone(p.env_var,
-                        f"{name} ist required=True aber env_var=None")
+                        f"{name} is required=True but env_var=None")
                 if p.api_base_env is None and p.needs_api_base:
                     self.assertIsNotNone(p.api_base_static,
-                        f"{name} braucht api_base aber hat weder env noch static")
+                        f"{name} needs api_base but has neither env nor static")
 
     def test_unique_names(self):
         names = [p.name for p in PROVIDERS.values()]
-        self.assertEqual(len(names), len(set(names)), "Provider-Namen dupliziert")
+        self.assertEqual(len(names), len(set(names)), "duplicate provider names")
 
     def test_unique_litellm_keys(self):
         keys = [p.litellm_key for p in PROVIDERS.values()]
         self.assertEqual(len(keys), len(set(keys)),
-            "LiteLLM-Keys dupliziert")
+            "duplicate LiteLLM keys")
 
     def test_get_unknown_raises(self):
         with self.assertRaises(KeyError):
@@ -42,7 +42,7 @@ class TestProviderConfigShape(unittest.TestCase):
 class TestOVHcloudAnonymous(unittest.TestCase):
     def test_ovhcloud_is_optional(self):
         ovh = get("ovhcloud")
-        self.assertFalse(ovh.required, "OVHcloud muss optional sein (anonymer Free-Tier)")
+        self.assertFalse(ovh.required, "OVHcloud must be optional (anonymous free tier)")
         self.assertEqual(ovh.env_var, "OVHCLOUD_API_KEY")
         self.assertIsNotNone(ovh.api_base_static)
 
@@ -52,19 +52,19 @@ class TestOVHcloudAnonymous(unittest.TestCase):
                 continue
             with self.subTest(provider=name):
                 self.assertTrue(p.required,
-                    f"{name} sollte required=True sein (kein anonymer Tier)")
+                    f"{name} should be required=True (no anonymous tier)")
 
 
 class TestProviderLookup(unittest.TestCase):
     def test_find_nvidia_by_double_openai(self):
-        # 'openai/openai/<model>' ist die NVIDIA-Konvention
+        # 'openai/openai/<model>' is the NVIDIA convention
         nvidia = PROVIDERS["nvidia"]
         self.assertEqual(nvidia.prefix, "openai")
         self.assertTrue(nvidia.vendor_in_path)
         self.assertEqual(nvidia.name, "nvidia")
 
     def test_github_and_ovhcloud_share_openai_prefix(self):
-        # Beide nutzen 'openai/<ModelName>' -- Diskrimination via api_base
+        # Both use 'openai/<ModelName>' -- discriminated via api_base
         github = PROVIDERS["github"]
         ovh = PROVIDERS["ovhcloud"]
         self.assertEqual(github.prefix, "openai")

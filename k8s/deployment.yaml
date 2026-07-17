@@ -7,8 +7,8 @@ metadata:
     app.kubernetes.io/name: litellm-free-models
     app.kubernetes.io/component: proxy
 spec:
-  # Bei replicas > 1 teilen sich die Pods Auth- und Response-Cache über Redis
-  # (enable_redis_auth_cache). Eine podAntiAffinity lohnt erst dann wieder.
+  # With replicas > 1, pods share the auth and response cache via Redis
+  # (enable_redis_auth_cache). A podAntiAffinity only pays off from then on.
   replicas: 1
   selector:
     matchLabels:
@@ -25,9 +25,9 @@ spec:
           type: RuntimeDefault
       containers:
         - name: litellm-proxy
-          # Gepinnte Version statt wanderndem main-latest (Reproduzierbarkeit;
-          # main-latest + IfNotPresent liesse jeden Node auf anderem Stand
-          # laufen). Update bewusst via Tag-Bump.
+          # Pinned version instead of a moving main-latest (reproducibility;
+          # main-latest + IfNotPresent would let every node run a different
+          # version). Updates happen deliberately via a tag bump.
           image: ghcr.io/berriai/litellm:v1.92.0
           imagePullPolicy: IfNotPresent
           args:
@@ -40,15 +40,15 @@ spec:
               containerPort: 4000
               protocol: TCP
           envFrom:
-            # Provider-API-Keys; von `make k8s-secret` aus .env erzeugt
-            # (explizite Key-Allowlist, enthaelt KEINE REDIS_*/POSTGRES_*).
+            # Provider API keys; created by `make k8s-secret` from .env
+            # (explicit key allowlist, contains NO REDIS_*/POSTGRES_*).
             - secretRef:
                 name: litellm-secrets
           env:
             # Redis cache (resolved by LiteLLM via os.environ/REDIS_* in
-            # config.yaml). REDIS_PASSWORD kommt ausschliesslich aus
-            # litellm-redis-secret (Single Source; `make k8s-secret`
-            # erzeugt es aus .env – Rotation: .env aendern + make k8s-secret
+            # config.yaml). REDIS_PASSWORD comes exclusively from
+            # litellm-redis-secret (single source; `make k8s-secret`
+            # creates it from .env – rotation: edit .env + make k8s-secret
             # + make k8s-restart).
             - name: REDIS_HOST
               value: "litellm-redis"
@@ -59,8 +59,8 @@ spec:
                 secretKeyRef:
                   name: litellm-redis-secret
                   key: redis-password
-            # Postgres für Key-Management & Spend-Tracking. $(VAR)-Expansion
-            # funktioniert in env-values (anders als in Probe-Kommandos).
+            # Postgres for key management & spend tracking. $(VAR) expansion
+            # works in env values (unlike in probe commands).
             - name: POSTGRES_PASSWORD
               valueFrom:
                 secretKeyRef:

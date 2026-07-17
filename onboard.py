@@ -1,23 +1,23 @@
 #!/usr/bin/env python3
 """
-Interaktives Onboarding fuer den LiteLLM Free-Models Proxy.
+Interactive onboarding for the LiteLLM Free-Models Proxy.
 
-Fuehrt durch das komplette Setup und ist bewusst WIEDERHOLBAR — auch fuer
-spaetere Aenderungen (neuer API-Key, Passwort-Rotation, Re-Render, Restart):
+Walks through the complete setup and is deliberately RE-RUNNABLE — also
+for later changes (new API key, password rotation, re-render, restart):
 
-  1. .env anlegen (aus .env.example) bzw. bestehende .env weiterverwenden
-  2. Grund-Secrets generieren (LITELLM_MASTER_KEY, REDIS_/POSTGRES_PASSWORD)
-  3. Provider-API-Keys gefuehrt eintragen (mit Signup-URLs und Hinweisen)
-  4. Optional: Keys LIVE gegen die Provider-Kataloge testen
-  5. config.yaml rendern (inkl. Single-Deployment-Warnungen)
-  6. Optional: Docker-Compose-Stack starten/neustarten + Readiness-Check
+  1. Create .env (from .env.example) or reuse an existing .env
+  2. Generate base secrets (LITELLM_MASTER_KEY, REDIS_/POSTGRES_PASSWORD)
+  3. Enter provider API keys interactively (with sign-up URLs and hints)
+  4. Optional: test the keys LIVE against the provider catalogs
+  5. Render config.yaml (including single-deployment warnings)
+  6. Optional: start/restart the Docker Compose stack + readiness check
 
-Nutzung:
-    python3 onboard.py                  # interaktiv (empfohlen)
-    python3 onboard.py --non-interactive  # nur Secrets generieren + rendern
+Usage:
+    python3 onboard.py                    # interactive (recommended)
+    python3 onboard.py --non-interactive  # only generate secrets + render
     make onboard
 
-Nur Python-Standardbibliothek, keine Dependencies (Repo-Konvention).
+Standard library only, no dependencies (repo convention).
 """
 
 from __future__ import annotations
@@ -37,46 +37,46 @@ ENV_FILE = REPO_ROOT / ".env"
 ENV_EXAMPLE = REPO_ROOT / ".env.example"
 PROXY_URL = "http://localhost:4444"
 
-# Werte, die als "nicht gesetzt" gelten (Platzhalter aus .env.example)
+# Values that count as "not set" (placeholders from .env.example)
 PLACEHOLDER_MARKERS = ("change-me", "change_me", "your-", "-here", "placeholder")
 
-# (env_var, Anzeigename, Signup-URL, Hinweis)
+# (env_var, display name, sign-up URL, hint)
 PROVIDER_KEYS: list[tuple[str, str, str, str]] = [
     ("OPENROUTER_API_KEY", "OpenRouter", "https://openrouter.ai/keys",
-     "Wichtigster Key: aktiviert den openrouter-free-Fallback in allen Chains."),
+     "Most important key: enables the openrouter-free fallback in every chain."),
     ("CEREBRAS_API_KEY", "Cerebras", "https://cloud.cerebras.ai/", ""),
     ("GROQ_API_KEY", "Groq", "https://console.groq.com/keys", ""),
     ("CLOUDFLARE_API_KEY", "Cloudflare Workers AI",
      "https://dash.cloudflare.com/profile/api-tokens",
-     "Braucht zusaetzlich CLOUDFLARE_API_BASE (naechster Eintrag)."),
-    ("CLOUDFLARE_API_BASE", "Cloudflare API-Base",
+     "Also needs CLOUDFLARE_API_BASE (next entry)."),
+    ("CLOUDFLARE_API_BASE", "Cloudflare API base",
      "https://developers.cloudflare.com/fundamentals/setup/find-account-and-zone-ids/",
      "Format: https://api.cloudflare.com/client/v4/accounts/<ACCOUNT_ID>/ai/v1"),
     ("GEMINI_API_KEY", "Google AI Studio", "https://aistudio.google.com/apikey",
-     "Derzeit kein aktives Deployment (gemma-3 eingestellt); nur fuer Syncs."),
+     "Currently no active deployment (gemma-3 retired); only for future syncs."),
     ("NVIDIA_API_KEY", "NVIDIA NIM", "https://build.nvidia.com/",
-     "Telefon-Verifikation noetig; dafuer 40 RPM."),
+     "Phone verification required; 40 RPM in return."),
     ("MISTRAL_API_KEY", "Mistral La Plateforme", "https://console.mistral.ai/", ""),
     ("COHERE_API_KEY", "Cohere", "https://dashboard.cohere.com/api-keys",
-     "Trial-Key: 1000 Calls/Monat."),
+     "Trial key: 1000 calls/month."),
     ("GITHUB_TOKEN", "GitHub Models", "https://github.com/settings/tokens",
-     "PAT mit Scope models:read."),
+     "PAT with the models:read scope."),
     ("OPENCODE_ZEN_API_KEY", "OpenCode Zen", "https://opencode.ai/zen", ""),
     ("LLM7IO_API_KEY", "LLM7.io", "https://token.llm7.io",
-     "'unused' = Basis-Free-Tier (2 RPM); kostenloses Token = 40 RPM."),
+     "'unused' = base free tier (2 RPM); free token = 40 RPM."),
     ("HF_TOKEN", "HuggingFace", "https://huggingface.co/settings/tokens", ""),
     ("OVHCLOUD_API_KEY", "OVHcloud", "https://www.ovhcloud.com/en/public-cloud/ai-endpoints/",
-     "Leer lassen = anonymer Free-Tier (2 RPM/IP/Modell), voellig OK."),
+     "Leave empty = anonymous free tier (2 RPM/IP/model), perfectly fine."),
 ]
 
-# Variablen, bei denen "leer" ein gueltiger, gewollter Zustand ist
+# Variables where "empty" is a valid, intentional state
 EMPTY_IS_OK = {"OVHCLOUD_API_KEY", "GEMINI_API_KEY"}
-# Variablen mit gueltigem Nicht-Key-Default
+# Variables with a valid non-key default
 SPECIAL_DEFAULTS = {"LLM7IO_API_KEY": "unused"}
 
 
 # ---------------------------------------------------------------------------
-# .env-Handling (kommentar-erhaltend)
+# .env handling (comment-preserving)
 # ---------------------------------------------------------------------------
 
 def read_env_lines() -> list[str]:
@@ -120,11 +120,11 @@ def is_placeholder(value: str) -> bool:
 
 
 def key_state(value: str, var: str) -> str:
-    """'ok' | 'leer' | 'platzhalter' | 'default'"""
+    """'ok' | 'empty' | 'placeholder' | 'default'"""
     if not value:
-        return "leer"
+        return "empty"
     if is_placeholder(value):
-        return "platzhalter"
+        return "placeholder"
     if SPECIAL_DEFAULTS.get(var) == value:
         return "default"
     return "ok"
@@ -132,14 +132,14 @@ def key_state(value: str, var: str) -> str:
 
 def mask(value: str) -> str:
     if not value:
-        return "(leer)"
+        return "(empty)"
     if len(value) <= 8:
         return value[:2] + "…"
     return value[:6] + "…" + value[-2:]
 
 
 # ---------------------------------------------------------------------------
-# Interaktions-Helfer
+# Interaction helpers
 # ---------------------------------------------------------------------------
 
 def ask(prompt: str, default: str = "") -> str:
@@ -147,17 +147,17 @@ def ask(prompt: str, default: str = "") -> str:
     try:
         answer = input(f"{prompt}{suffix}: ").strip()
     except (EOFError, KeyboardInterrupt):
-        print("\nAbgebrochen. Bereits geschriebene .env-Aenderungen bleiben erhalten.")
+        print("\nAborted. .env changes already written are kept.")
         sys.exit(130)
     return answer or default
 
 
 def ask_yes_no(prompt: str, default: bool = True) -> bool:
-    hint = "J/n" if default else "j/N"
+    hint = "Y/n" if default else "y/N"
     answer = ask(f"{prompt} ({hint})").lower()
     if not answer:
         return default
-    return answer in {"j", "ja", "y", "yes"}
+    return answer in {"y", "yes", "j", "ja"}
 
 
 def heading(text: str) -> None:
@@ -168,49 +168,49 @@ def heading(text: str) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Schritte
+# Steps
 # ---------------------------------------------------------------------------
 
 def step_env_file() -> list[str]:
-    heading("Schritt 1/6 — .env")
+    heading("Step 1/6 — .env")
     if ENV_FILE.exists():
-        print(f"  Bestehende {ENV_FILE.name} gefunden — Werte werden uebernommen,")
-        print("  du kannst sie in den naechsten Schritten gezielt aendern.")
+        print(f"  Found an existing {ENV_FILE.name} — its values are reused,")
+        print("  you can change them selectively in the next steps.")
     else:
         shutil.copy2(ENV_EXAMPLE, ENV_FILE)
-        print(f"  {ENV_FILE.name} aus {ENV_EXAMPLE.name} angelegt.")
+        print(f"  Created {ENV_FILE.name} from {ENV_EXAMPLE.name}.")
     return read_env_lines()
 
 
 def step_base_secrets(lines: list[str], interactive: bool) -> None:
-    heading("Schritt 2/6 — Grund-Secrets (Master-Key & Passwoerter)")
+    heading("Step 2/6 — Base secrets (master key & passwords)")
     specs = [
         ("LITELLM_MASTER_KEY", "sk-" + secrets.token_hex(24),
-         "Auth-Token, das Clients an den Proxy senden"),
+         "Auth token that clients send to the proxy"),
         ("REDIS_PASSWORD", secrets.token_hex(16),
-         "Pflicht: docker compose startet ohne nicht"),
+         "Required: docker compose won't start without it"),
         ("POSTGRES_PASSWORD", secrets.token_hex(16),
-         "Pflicht: docker compose startet ohne nicht"),
+         "Required: docker compose won't start without it"),
     ]
     for var, generated, why in specs:
         current = get_value(lines, var)
         if key_state(current, var) == "ok":
-            print(f"  [OK] {var} ist gesetzt ({mask(current)})")
+            print(f"  [OK] {var} is set ({mask(current)})")
             continue
         if interactive:
             print(f"\n  {var} — {why}")
-            value = ask("  Eigenen Wert eingeben oder Enter = sicher generieren")
+            value = ask("  Enter your own value or press Enter to generate one securely")
             value = value or generated
         else:
             value = generated
         set_value(lines, var, value)
-        print(f"  [NEU] {var} = {mask(value)}")
+        print(f"  [NEW] {var} = {mask(value)}")
 
 
 def step_provider_keys(lines: list[str]) -> None:
-    heading("Schritt 3/6 — Provider-API-Keys")
-    print("  Alle Keys sind optional: Provider ohne Key werden beim Rendern")
-    print("  einfach weggelassen. Mehr Provider = mehr Redundanz & Rate-Limit.")
+    heading("Step 3/6 — Provider API keys")
+    print("  All keys are optional: providers without a key are simply")
+    print("  dropped when rendering. More providers = more redundancy & rate limit.")
 
     def print_table() -> None:
         print()
@@ -219,85 +219,85 @@ def step_provider_keys(lines: list[str]) -> None:
             label = {
                 "ok": "[OK]  ",
                 "default": "[STD] ",
-                "leer": "[--]  ",
-                "platzhalter": "[??]  ",
+                "empty": "[--]  ",
+                "placeholder": "[??]  ",
             }[state]
             extra = ""
-            if state == "platzhalter":
-                extra = "  (Platzhalter — zaehlt als nicht gesetzt)"
+            if state == "placeholder":
+                extra = "  (placeholder — counts as not set)"
             elif state == "default":
-                extra = "  (Default-Free-Tier)"
-            elif state == "leer" and var in EMPTY_IS_OK:
-                extra = "  (leer ist OK)"
+                extra = "  (default free tier)"
+            elif state == "empty" and var in EMPTY_IS_OK:
+                extra = "  (empty is fine)"
             print(f"   {i:2d}  {label} {var:24s} {name}{extra}")
 
     def edit(idx: int) -> None:
         var, name, url, hint = PROVIDER_KEYS[idx]
         current = get_value(lines, var)
         print(f"\n  ── {name} ({var})")
-        print(f"     Key holen: {url}")
+        print(f"     Get a key: {url}")
         if hint:
-            print(f"     Hinweis:   {hint}")
-        print(f"     Aktuell:   {mask(current) if key_state(current, var) == 'ok' else key_state(current, var)}")
-        value = ask("     Neuer Wert ('-' = leeren, Enter = unveraendert)")
+            print(f"     Hint:      {hint}")
+        print(f"     Current:   {mask(current) if key_state(current, var) == 'ok' else key_state(current, var)}")
+        value = ask("     New value ('-' = clear, Enter = unchanged)")
         if value == "-":
             set_value(lines, var, "")
-            print("     -> geleert")
+            print("     -> cleared")
         elif value:
             set_value(lines, var, value)
-            print(f"     -> gesetzt ({mask(value)})")
+            print(f"     -> set ({mask(value)})")
 
     while True:
         print_table()
-        choice = ask("\n  Nummer bearbeiten, 'a' = alle fehlenden durchgehen, Enter = weiter")
+        choice = ask("\n  Number to edit, 'a' = go through all missing ones, Enter = continue")
         if not choice:
             return
         if choice.lower() == "a":
             for i, (var, _n, _u, _h) in enumerate(PROVIDER_KEYS):
                 state = key_state(get_value(lines, var), var)
-                if state in {"leer", "platzhalter"} and var not in EMPTY_IS_OK:
+                if state in {"empty", "placeholder"} and var not in EMPTY_IS_OK:
                     edit(i)
         elif choice.isdigit() and 1 <= int(choice) <= len(PROVIDER_KEYS):
             edit(int(choice) - 1)
         else:
-            print("  Ungueltige Eingabe.")
+            print("  Invalid input.")
 
 
 def step_key_check(lines: list[str]) -> None:
-    heading("Schritt 4/6 — Live-Key-Check (Provider-Kataloge abfragen)")
-    print("  Testet jeden gesetzten Key mit einer read-only Katalog-Abfrage.")
-    print("  [FAIL] mit 401/403 = Key ungueltig; 'Key fehlt' = nicht gesetzt.\n")
+    heading("Step 4/6 — Live key check (querying provider catalogs)")
+    print("  Tests every key that's set with a read-only catalog query.")
+    print("  [FAIL] with 401/403 = invalid key; 'Missing key' = not set.\n")
     import importlib.util
     path = REPO_ROOT / "find-shared-models.py"
     spec = importlib.util.spec_from_file_location("fsm_onboard", path)
     fsm = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(fsm)
 
-    # Platzhalter-Werte nicht mitschicken — sie wuerden nur als 401 failen
+    # Don't send placeholder values — they'd just fail as 401
     env = {
         k: v for k, v in env_dict(lines).items()
         if not is_placeholder(v)
     }
     _raw, errors = fsm.collect_models(env)
-    missing = [n for n, msg in errors if msg.startswith("Key fehlt")]
-    failed = [(n, msg) for n, msg in errors if not msg.startswith("Key fehlt")]
+    missing = [n for n, msg in errors if msg.startswith("Missing key")]
+    failed = [(n, msg) for n, msg in errors if not msg.startswith("Missing key")]
     if missing:
-        print(f"\n  Ohne Key uebersprungen: {', '.join(missing)}")
+        print(f"\n  Skipped without a key: {', '.join(missing)}")
     if failed:
-        print("\n  ⚠ Fehlgeschlagene Abfragen (Key pruefen!):")
+        print("\n  ⚠ Failed queries (check the key!):")
         for n, msg in failed:
             print(f"    - {n}: {msg}")
 
 
 def step_render() -> bool:
-    heading("Schritt 5/6 — config.yaml rendern")
-    sys.stdout.flush()  # Reihenfolge wahren, wenn stdout gepiped ist
+    heading("Step 5/6 — Render config.yaml")
+    sys.stdout.flush()  # keep ordering when stdout is piped
     result = subprocess.run(
         [sys.executable, str(REPO_ROOT / "render-config.py")],
         cwd=REPO_ROOT,
     )
     if result.returncode != 0:
-        print("  FEHLER: Rendern fehlgeschlagen — siehe Ausgabe oben.")
+        print("  ERROR: rendering failed — see the output above.")
         return False
     return True
 
@@ -330,7 +330,7 @@ def stack_running() -> bool:
 
 def wait_for_readiness(timeout_seconds: int = 180) -> bool:
     url = f"{PROXY_URL}/health/readiness"
-    print(f"  Warte auf {url} (max. {timeout_seconds}s; erster Start zieht Images) ...")
+    print(f"  Waiting for {url} (up to {timeout_seconds}s; the first start pulls images) ...")
     deadline = time.time() + timeout_seconds
     while time.time() < deadline:
         try:
@@ -344,41 +344,41 @@ def wait_for_readiness(timeout_seconds: int = 180) -> bool:
 
 
 def step_docker(lines: list[str]) -> None:
-    heading("Schritt 6/6 — Docker-Compose-Stack")
+    heading("Step 6/6 — Docker Compose stack")
     if not docker_available():
-        print("  docker / docker compose nicht gefunden — Schritt uebersprungen.")
-        print("  Manueller Start spaeter:  make docker-compose-up")
+        print("  docker / docker compose not found — step skipped.")
+        print("  Start it manually later:  make docker-compose-up")
         return
 
     running = stack_running()
     if running:
-        print("  Stack laeuft bereits.")
-        action = "Neu starten (uebernimmt neue .env + config.yaml)?"
+        print("  The stack is already running.")
+        action = "Restart it (picks up the new .env + config.yaml)?"
     else:
-        action = "Stack jetzt starten (Postgres + Redis + Proxy auf Port 4444)?"
+        action = "Start the stack now (Postgres + Redis + proxy on port 4444)?"
     if not ask_yes_no(f"  {action}"):
-        print("  Uebersprungen. Spaeter:  make docker-compose-up")
+        print("  Skipped. Later:  make docker-compose-up")
         return
 
     if compose(["up", "-d"]).returncode != 0:
-        print("  FEHLER: docker compose up fehlgeschlagen — siehe Ausgabe oben.")
+        print("  ERROR: docker compose up failed — see the output above.")
         return
     if running:
-        # up -d erkennt Aenderungen an der gemounteten config.yaml nicht —
-        # der Proxy liest sie nur beim Start. Deshalb expliziter Restart.
+        # up -d doesn't detect changes to the mounted config.yaml — the
+        # proxy only reads it at startup. Hence an explicit restart.
         compose(["restart", "litellm-proxy"])
 
     if wait_for_readiness():
-        print(f"\n  ✔ Proxy ist bereit: {PROXY_URL}")
-        print("\n  Test-Request (Master-Key steht in .env):")
+        print(f"\n  ✔ Proxy is ready: {PROXY_URL}")
+        print("\n  Test request (the master key is in .env):")
         print(f"""
     curl {PROXY_URL}/v1/chat/completions \\
       -H "Authorization: Bearer $(grep '^LITELLM_MASTER_KEY=' .env | cut -d= -f2-)" \\
       -H "Content-Type: application/json" \\
-      -d '{{"model": "gpt-oss-120b", "messages": [{{"role": "user", "content": "Sag hallo!"}}]}}'
+      -d '{{"model": "gpt-oss-120b", "messages": [{{"role": "user", "content": "Say hello!"}}]}}'
 """)
     else:
-        print("\n  ⚠ Proxy wurde nicht rechtzeitig ready. Logs ansehen mit:")
+        print("\n  ⚠ The proxy didn't become ready in time. Check the logs with:")
         print("    docker compose --env-file .env logs -f litellm-proxy")
 
 
@@ -391,23 +391,23 @@ def main() -> int:
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     ap.add_argument("--non-interactive", action="store_true",
-                    help="Keine Fragen: .env sicherstellen, fehlende Grund-Secrets "
-                         "generieren, rendern. (Keine Key-Eingabe, kein Docker.)")
+                    help="No prompts: ensure .env exists, generate missing base "
+                         "secrets, render. (No key entry, no Docker.)")
     ap.add_argument("--skip-keycheck", action="store_true",
-                    help="Live-Key-Check ueberspringen (keine Netzwerk-Abfragen)")
+                    help="Skip the live key check (no network queries)")
     ap.add_argument("--skip-docker", action="store_true",
-                    help="Docker-Schritt ueberspringen")
+                    help="Skip the Docker step")
     args = ap.parse_args()
 
     interactive = not args.non_interactive
     if interactive and not sys.stdin.isatty():
-        print("Kein TTY erkannt — nutze --non-interactive fuer Skript-Setups.",
+        print("No TTY detected — use --non-interactive for scripted setups.",
               file=sys.stderr)
         return 2
 
     print("=" * 74)
     print("  LiteLLM Free-Models Proxy — Onboarding")
-    print("  (jederzeit wieder ausfuehrbar, z.B. fuer neue Keys oder Restarts)")
+    print("  (safe to re-run any time, e.g. for new keys or restarts)")
     print("=" * 74)
 
     lines = step_env_file()
@@ -417,10 +417,10 @@ def main() -> int:
     if interactive:
         step_provider_keys(lines)
         write_env(lines)
-        print(f"\n  .env gespeichert ({ENV_FILE})")
+        print(f"\n  .env saved ({ENV_FILE})")
 
         if not args.skip_keycheck and ask_yes_no(
-                "\n  Keys jetzt live gegen die Provider-Kataloge testen?"):
+                "\n  Test the keys live against the provider catalogs now?"):
             step_key_check(lines)
 
     if not step_render():
@@ -429,15 +429,15 @@ def main() -> int:
     if interactive and not args.skip_docker:
         step_docker(lines)
 
-    heading("Fertig — nuetzliche Kommandos")
-    print("""  python3 onboard.py                        dieses Onboarding erneut
-  make docker-compose-up / -down            Stack starten / stoppen
-  make render-config                        nach .env-Aenderungen neu rendern
-  make check-config                         Config durch echten LiteLLM-Boot validieren
-  make test                                 Unit-Tests
-  python3 find-shared-models.py             Provider-Overlap + Stale-Report
-  make backup-db                            Postgres-Dump nach ./backups/
-  make opencode-config                      Provider-Eintrag fuer OpenCode anlegen/updaten""")
+    heading("Done — useful commands")
+    print("""  python3 onboard.py                        run this onboarding again
+  make docker-compose-up / -down            start / stop the stack
+  make render-config                        re-render after .env changes
+  make check-config                         validate the config with a real LiteLLM boot
+  make test                                 unit tests
+  python3 find-shared-models.py             provider overlap + stale report
+  make backup-db                            Postgres dump to ./backups/
+  make opencode-config                      create/update the OpenCode provider entry""")
     return 0
 
 

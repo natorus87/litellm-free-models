@@ -1,68 +1,68 @@
-# Contributing zu `litellm-free-models`
+# Contributing to `litellm-free-models`
 
-Danke für dein Interesse, zum Projekt beizutragen! Dieses Dokument
-beschreibt den Workflow für Issues, Pull Requests und lokale Tests.
-
----
-
-## 1. Issue-Workflow
-
-Bevor du Code änderst, **öffne immer zuerst ein Issue** (außer bei
-Tippfehlern in Doku/Kommentaren).
-
-### Bug-Reports
-
-Verwende das Template `.github/ISSUE_TEMPLATE/bug_report.md`. Ein guter
-Bug-Report enthält:
-
-- Klare Beschreibung des Problems
-- Reproduktion (Befehle, `.env`-Status, Docker/K8s-Setup)
-- Erwartetes vs. tatsächliches Verhalten
-- Relevante Log-Auszüge (`docker logs`, `kubectl logs`, `python3 …`)
-- Umgebung (Python-Version, OS, LiteLLM-Version)
-
-> **Wichtig:** **Keine API-Keys posten!** Vor dem Posten Logs mit
-> `sed 's/\(KEY=\).*/\1***REDACTED***/' .env` oder ähnlich bereinigen.
-
-### Feature-Requests
-
-Verwende `.github/ISSUE_TEMPLATE/feature_request.md`. Beschreibe:
-
-- Welches Problem gelöst wird
-- Konkrete Idee / Mock-API
-- Alternativen, die du erwogen hast
-- Bei neuen Providern: Free-Tier-Link, RPM, Auth-Verfahren
-
-### Konfigurationsfragen
-
-Für "Wie konfiguriere ich X?" → `.github/ISSUE_TEMPLATE/config_question.md`.
+Thanks for your interest in contributing to the project! This document
+describes the workflow for issues, pull requests, and local testing.
 
 ---
 
-## 2. Pull-Request-Workflow
+## 1. Issue Workflow
+
+Before you change code, **always open an issue first** (except for
+typo fixes in docs/comments).
+
+### Bug Reports
+
+Use the template `.github/ISSUE_TEMPLATE/bug_report.md`. A good bug
+report includes:
+
+- A clear description of the problem
+- Reproduction steps (commands, `.env` state, Docker/K8s setup)
+- Expected vs. actual behavior
+- Relevant log excerpts (`docker logs`, `kubectl logs`, `python3 …`)
+- Environment (Python version, OS, LiteLLM version)
+
+> **Important:** **Never post API keys!** Sanitize logs before posting
+> with `sed 's/\(KEY=\).*/\1***REDACTED***/' .env` or similar.
+
+### Feature Requests
+
+Use `.github/ISSUE_TEMPLATE/feature_request.md`. Describe:
+
+- What problem is being solved
+- The concrete idea / mock API
+- Alternatives you considered
+- For new providers: free-tier link, RPM, auth method
+
+### Configuration Questions
+
+For "How do I configure X?" → `.github/ISSUE_TEMPLATE/config_question.md`.
+
+---
+
+## 2. Pull Request Workflow
 
 ```text
-1.  Fork   das Repo
-2.  Clone  deinen Fork
-3.  Branch feat/<kurzname>  oder  fix/<kurzname>
-4.  Code   schreiben + Tests schreiben
-5.  make test              # alle Tests grün
-6.  make render-config     # Pipeline läuft fehlerfrei
-7.  Commit mit Conventional-Commits-Prefix
-8.  Push   → Pull Request öffnen → CI muss grün sein
+1.  Fork   the repo
+2.  Clone  your fork
+3.  Branch feat/<short-name>  or  fix/<short-name>
+4.  Write  code + write tests
+5.  make test              # all tests green
+6.  make render-config     # pipeline runs error-free
+7.  Commit with a Conventional Commits prefix
+8.  Push   → open a pull request → CI must be green
 ```
 
-### Branch-Naming
+### Branch Naming
 
-- `feat/<name>` — neues Feature
-- `fix/<name>` — Bug-Fix
-- `docs/<name>` — Doku-only
-- `chore/<name>` — Refactoring, Tooling
-- `test/<name>` — nur Tests
+- `feat/<name>` — new feature
+- `fix/<name>` — bug fix
+- `docs/<name>` — docs-only
+- `chore/<name>` — refactoring, tooling
+- `test/<name>` — tests only
 
-### Commit-Messages (Englisch)
+### Commit Messages (English)
 
-Verwende [Conventional Commits](https://www.conventionalcommits.org/):
+Use [Conventional Commits](https://www.conventionalcommits.org/):
 
 ```text
 feat: add OVHcloud as 13th provider
@@ -72,7 +72,7 @@ test: add render-config orphan-cleanup test
 chore: bump litellm version in dockerfile
 ```
 
-Breaking Changes markieren mit `!`:
+Mark breaking changes with `!`:
 
 ```text
 feat!: rename openrouter-free to openrouter-default
@@ -80,108 +80,108 @@ feat!: rename openrouter-free to openrouter-default
 
 ---
 
-## 3. Code-Style
+## 3. Code Style
 
 ### Python
 
-- **Version:** Python 3.10+ (CI testet 3.10, 3.11, 3.12, 3.13)
-- **Dependencies:** **Nur Standard-Library** (`json`, `os`, `re`, `urllib`,
-  `pathlib`, `argparse`, `dataclasses`, …). **Kein PyYAML, kein requests,
-  kein httpx.** Das Projekt läuft überall ohne `pip install`.
-- **Style:** PEP 8, 4 Spaces, `snake_case`, Type-Hints
+- **Version:** Python 3.10+ (CI tests 3.10, 3.11, 3.12, 3.13)
+- **Dependencies:** **Standard library only** (`json`, `os`, `re`, `urllib`,
+  `pathlib`, `argparse`, `dataclasses`, …). **No PyYAML, no requests,
+  no httpx.** The project runs everywhere without `pip install`.
+- **Style:** PEP 8, 4 spaces, `snake_case`, type hints
   (`from __future__ import annotations`).
-- **Docstrings:** Deutsch oder Englisch — pro Datei konsistent.
-- **Keine Kommentare**, die offensichtlichen Code wiederholen. Nur
-  Begründungen für nicht-offensichtliche Entscheidungen.
-- **Print statt Logging:** CLI-Scripts dürfen `print()` benutzen.
+- **Docstrings:** English.
+- **No comments** that just repeat obvious code. Only justify
+  non-obvious decisions.
+- **Print instead of logging:** CLI scripts may use `print()`.
 
 ### YAML (`config.template.yaml`)
 
-- 2-Space-Indent
-- Provider-Header als `# === Provider: <Name> ===` Kommentar
-- Modelle alphabetisch sortiert nach `model_name`
-- `rpm:` / `api_key:` immer explizit setzen
-- Kommentare in Englisch
+- 2-space indent
+- Provider header as a `# === Provider: <Name> ===` comment
+- Models sorted alphabetically by `model_name`
+- Always set `rpm:` / `api_key:` explicitly
+- Comments in English
 
 ### Tests
 
-- `pytest` mit Dateinamen `test_<modul>.py` in `tests/`
-- Tests für **neue Features sind verpflichtend**
-- Bestehende Tests dürfen nicht entfernt werden — nur erweitern
-- `make test` muss grün bleiben
+- `pytest` with filenames `test_<module>.py` in `tests/`
+- Tests for **new features are mandatory**
+- Existing tests must not be removed — only extended
+- `make test` must stay green
 
 ---
 
-## 4. Lokale Verifikation
+## 4. Local Verification
 
-Bevor du einen PR öffnest:
+Before opening a PR:
 
 ```bash
-# 1. Alle Tests grün
+# 1. All tests green
 make test
 
-# 2. Render-Pipeline läuft
+# 2. Render pipeline runs
 make render-config
 
-# 3. Dry-Run zeigt keinen ungewollten Diff
+# 3. Dry run shows no unwanted diff
 git diff config.yaml
 ```
 
-CI auf GitHub Actions läuft **identisch** (Python 3.10–3.13,
-`make test` + `python3 render-config.py --dry-run`). Wenn CI rot ist,
-wird der PR nicht gemergt.
+CI on GitHub Actions runs **identically** (Python 3.10–3.13,
+`make test` + `python3 render-config.py --dry-run`). If CI is red,
+the PR won't be merged.
 
 ---
 
-## 5. Naming-Konventionen
+## 5. Naming Conventions
 
-### Provider
+### Providers
 
-- Schlüssel in `providers_config.py`: `lowercase`, keine Sonderzeichen
-  (z.B. `"openrouter"`, `"ovhcloud"`, `"huggingface"`).
-- Anzeigename: offizieller Markenname (z.B. `"OpenRouter"`, `"OVHcloud"`).
-- API-Prefix in LiteLLM: `openrouter/`, `cerebras/`, `groq/`,
+- Key in `providers_config.py`: `lowercase`, no special characters
+  (e.g. `"openrouter"`, `"ovhcloud"`, `"huggingface"`).
+- Display name: official brand name (e.g. `"OpenRouter"`, `"OVHcloud"`).
+- API prefix in LiteLLM: `openrouter/`, `cerebras/`, `groq/`,
   `cloudflare/`, `gemini/`, `mistral/`, `cohere/`, `huggingface/`.
-  Für OpenAI-kompatible Provider (`openai/`) wird der Prefix durch
-  `api_base` ersetzt (NVIDIA, GitHub Models, OpenCode Zen, LLM7.io,
+  For OpenAI-compatible providers (`openai/`), the prefix is replaced
+  by `api_base` (NVIDIA, GitHub Models, OpenCode Zen, LLM7.io,
   OVHcloud).
 
-### Modelle
+### Models
 
-- `model_name` (LiteLLM-public): `lowercase`, Bindestriche
-  (z.B. `gpt-oss-120b`, `llama-3.3-70b-instruct`).
-- Versions-Suffixe: `-it`, `-instruct`, `-fp8`, `-fp8-fast`.
-- Kein Provider-Name im `model_name` (Provider wird über
-  `litellm_params.model` abgebildet).
+- `model_name` (LiteLLM-public): `lowercase`, hyphens
+  (e.g. `gpt-oss-120b`, `llama-3.3-70b-instruct`).
+- Version suffixes: `-it`, `-instruct`, `-fp8`, `-fp8-fast`.
+- No provider name in the `model_name` (the provider is mapped via
+  `litellm_params.model`).
 
 ### Deployments
 
-- Pro Provider genau **ein** Deployment pro `model_name`
-  (Load-Balancing läuft über `simple-shuffle`).
-- Pro Provider unterschiedliche `model_name`-Werte erlaubt
-  (z.B. `gpt-oss-120b` von OpenRouter und `gpt-oss-120b` von OVHcloud
-  → 2 Deployments, 1 `model_name`).
+- Exactly **one** deployment per provider per `model_name`
+  (load balancing runs via `simple-shuffle`).
+- Different `model_name` values allowed per provider
+  (e.g. `gpt-oss-120b` from OpenRouter and `gpt-oss-120b` from OVHcloud
+  → 2 deployments, 1 `model_name`).
 
-### Fallback-Chains
+### Fallback Chains
 
-- Reihenfolge: ähnliche Qualität zuerst, leichtere Modelle zuletzt
-- Maximal 4–5 Einträge pro Chain
-- Catch-All `*` als letzte Chain
-
----
-
-## 6. Was NICHT gemergt wird
-
-- Provider ohne echten Free-Tier (z.B. reines Paid-Only mit Trial)
-- Reverse-Proxies mit fragwürdiger Legalität/Reliabilität
-  (z.B. Pollinations.ai, UncloseAI, G4F.dev)
-- Code, der neue externe Dependencies einführt
-- Änderungen an `config.yaml` direkt (immer `config.template.yaml`
-  bearbeiten und `make render-config` laufen lassen)
+- Order: similar quality first, lighter models last
+- Maximum 4–5 entries per chain
+- Catch-all `*` as the last chain
 
 ---
 
-## 7. Lizenz
+## 6. What Won't Be Merged
 
-Mit deinem Beitrag stimmst du zu, dass dein Beitrag unter der
-[MIT-Lizenz](./LICENSE) des Projekts lizenziert wird.
+- Providers without a genuine free tier (e.g. paid-only with a trial)
+- Reverse proxies with questionable legality/reliability
+  (e.g. Pollinations.ai, UncloseAI, G4F.dev)
+- Code that introduces new external dependencies
+- Direct changes to `config.yaml` (always edit `config.template.yaml`
+  and run `make render-config`)
+
+---
+
+## 7. License
+
+By contributing, you agree that your contribution will be licensed
+under the project's [MIT license](./LICENSE).

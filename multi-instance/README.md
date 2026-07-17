@@ -1,106 +1,106 @@
 # Multi-Instance LiteLLM Setup — 1 Master + 2 Slaves
 
-Erweitert das [Haupt-Setup](../README.md) auf **3 eigenständige LiteLLM-Instanzen**, die zusammenarbeiten, um Rate-Limits weiter zu umgehen.
+Extends the [main setup](../README.md) to **3 independent LiteLLM instances** that work together to further work around rate limits.
 
-> **Wann lohnt sich das?** LiteLLM kann mehrere Deployments desselben Providers
-> mit unterschiedlichen Keys auch **in einer einzigen Instanz** führen – gleicher
-> 3×-Effekt ohne zweite Config-Pipeline, drei Container und Master-Hop.
-> Das Master/Slave-Setup lohnt sich vor allem, wenn die Instanzen auf
-> **getrennten Hosts/Egress-IPs** laufen (relevant für IP-basierte Limits wie
-> OVHclouds anonymen Tier) oder getrennt betrieben werden sollen.
+> **When is this worth it?** LiteLLM can hold multiple deployments of the
+> same provider with different keys **in a single instance** too — same
+> 3× effect without a second config pipeline, three containers, and the
+> master hop. The master/slave setup mainly pays off when the instances
+> run on **separate hosts/egress IPs** (relevant for IP-based limits like
+> OVHcloud's anonymous tier) or need to be operated separately.
 
-## Architektur
+## Architecture
 
 ```
                       ┌──────────────┐
   Client ──────────►  │   MASTER     │  Port 4000
-                      │  (eigene     │
-                      │   API-Keys)  │
+                      │  (own        │
+                      │   API keys)  │
                       └──────┬───────┘
                              │
               ┌──────────────┼──────────────┐
               ▼              ▼              ▼
      ┌────────────┐  ┌────────────┐  ┌────────────┐
-     │  Direkt    │  │  SLAVE 1   │  │  SLAVE 2   │
-     │ (eigene    │  │ Port 4001  │  │ Port 4002  │
-     │  Keys)     │  │ (eigene    │  │ (eigene    │
-     │            │  │  Keys)     │  │  Keys)     │
+     │  Direct    │  │  SLAVE 1   │  │  SLAVE 2   │
+     │ (own       │  │ Port 4001  │  │ Port 4002  │
+     │  keys)     │  │ (own       │  │ (own       │
+     │            │  │  keys)     │  │  keys)     │
      └────────────┘  └────────────┘  └────────────┘
 ```
 
 **Master** (multi-instance/master/config.yaml):
-- **99 direkte Deployments** mit den API-Keys des Masters
-- **72 Slave-Deployments** (36 Modelle × 2 Slaves), die HTTP‑Requests an `slave1:4000` / `slave2:4000` senden
-- → **171 Deployments** insgesamt
+- **99 direct deployments** using the master's API keys
+- **72 slave deployments** (36 models × 2 slaves) that send HTTP requests to `slave1:4000` / `slave2:4000`
+- → **171 deployments** total
 
-**Jeder Slave** (nutzt die base `config.yaml`):
-- Läuft mit **eigenen API-Keys** (andere Accounts als Master und andere Slaves)
-- Proxied die Anfrage an die echten Provider (OpenRouter, Groq, etc.)
+**Each slave** (uses the base `config.yaml`):
+- Runs with **its own API keys** (different accounts than the master and the other slaves)
+- Proxies the request to the real providers (OpenRouter, Groq, etc.)
 
-**Routing**: Der Master routet per `usage-based-routing-v2` über ALLE 171 Deployments – Deployments mit verbleibendem `tpm`/`rpm`-Budget werden bevorzugt; über das gemeinsame Redis wird der Verbrauch instanzübergreifend getrackt (inkl. geteilter Cooldowns). Sind die direkten Deployments ausgeschöpft, routet der Master zu einem Slave – der hat eigene Keys und eigene Rate-Limits.
+**Routing**: The master routes via `usage-based-routing-v2` across ALL 171 deployments — deployments with remaining `tpm`/`rpm` budget are preferred; usage is tracked cross-instance (including shared cooldowns) via the shared Redis. Once the direct deployments are exhausted, the master routes to a slave — which has its own keys and its own rate limits.
 
-## Effekt
+## Effect
 
-| Modell | Master-Deployments (einfach) | Master-Deployments (multi-instance) |
+| Model | Master Deployments (single instance) | Master Deployments (multi-instance) |
 |---|---|---|
-| `gpt-oss-120b` | 7 (Provider) | **9** (7 direkt + 2 Slave-Routen) |
+| `gpt-oss-120b` | 7 (providers) | **9** (7 direct + 2 slave routes) |
 | `llama-3.3-70b-instruct` | 6 | **8** |
-| Single-Provider | 1 | **3** (1 direkt + 2 Slave-Routen) |
+| Single provider | 1 | **3** (1 direct + 2 slave routes) |
 
-Jede Slave-Route fächert intern wieder auf alle Provider-Deployments des Slaves auf. Effektiv werden die Provider-Rate-Limits **verdreifacht** (Master + Slave1 + Slave2 mit je eigenen Accounts) – bei getrennten Egress-IPs auch für IP-basierte Limits.
+Each slave route in turn fans out internally to all of that slave's provider deployments. Effectively, the provider rate limits are **tripled** (master + slave1 + slave2 with their own accounts each) — including for IP-based limits, given separate egress IPs.
 
-## Voraussetzungen
+## Prerequisites
 
 - Docker & Docker Compose
-- **3 Sätze API-Keys** – einer für den Master, je einer für Slave1 und Slave2
-  - Gleicher Provider, aber **unterschiedliche Accounts** = 3× mehr Requests/Minute
+- **3 sets of API keys** — one for the master, one each for slave1 and slave2
+  - Same provider but **different accounts** = 3× more requests/minute
 
 ## Setup
 
 ```bash
 cd multi-instance
 
-# 1. Master-Konfiguration generieren
+# 1. Generate the master configuration
 python3 generate-config.py
 
-# 2. Projekt-.env anlegen (Redis-/Postgres-Passwörter für Compose-Interpolation)
+# 2. Create the project .env (Redis/Postgres passwords for Compose interpolation)
 cp .env.example .env
-# REDIS_PASSWORD und POSTGRES_PASSWORD setzen (z.B. openssl rand -hex 16).
-# Ohne diese Werte verweigert docker compose den Start (kein stiller
-# Default). Hinweis: Compose liest ${VAR} NUR aus dieser Projekt-.env,
-# nie aus den per-Instanz env_file-Dateien.
+# Set REDIS_PASSWORD and POSTGRES_PASSWORD (e.g. openssl rand -hex 16).
+# Without these values, docker compose refuses to start (no silent
+# default). Note: Compose reads ${VAR} ONLY from this project .env,
+# never from the per-instance env_file files.
 
-# 3. Per-Instanz-.env-Dateien anlegen und API-Keys eintragen
+# 3. Create the per-instance .env files and fill in API keys
 cp master/.env.example master/.env
 cp slave1/.env.example slave1/.env
 cp slave2/.env.example slave2/.env
 
-# Jetzt master/.env, slave1/.env, slave2/.env editieren
-# WICHTIG: Jede Instanz braucht ANDERE API-Keys!
+# Now edit master/.env, slave1/.env, slave2/.env
+# IMPORTANT: each instance needs DIFFERENT API keys!
 
-# 4. Starten
+# 4. Start
 docker compose up -d
 
-# 5. Testen (gegen den Master)
+# 5. Test (against the master)
 curl http://localhost:4000/health/readiness
 
 curl http://localhost:4000/v1/chat/completions \
   -H "Authorization: Bearer $(grep LITELLM_MASTER_KEY master/.env | cut -d= -f2)" \
   -H "Content-Type: application/json" \
-  -d '{"model": "gpt-oss-120b", "messages": [{"role": "user", "content": "Hallo"}]}'
+  -d '{"model": "gpt-oss-120b", "messages": [{"role": "user", "content": "Hello"}]}'
 ```
 
 ## Ports
 
-| Instanz | Container-Port | Host-Port |
+| Instance | Container Port | Host Port |
 |---|---|---|
 | Master | 4000 | 4000 |
 | Slave 1 | 4000 | 4001 |
 | Slave 2 | 4000 | 4002 |
 
-## API-Keys pro Instanz
+## API Keys per Instance
 
-Jede `.env`-Datei braucht KEYS VON UNTERSCHIEDLICHEN ACCOUNTS:
+Every `.env` file needs KEYS FROM DIFFERENT ACCOUNTS:
 
 | Variable | Master | Slave 1 | Slave 2 |
 |---|---|---|---|
@@ -110,54 +110,54 @@ Jede `.env`-Datei braucht KEYS VON UNTERSCHIEDLICHEN ACCOUNTS:
 | … | – | – | – |
 | `LITELLM_MASTER_KEY` | `sk-master-xyz` | `sk-slave1-xyz` | `sk-slave2-xyz` |
 
-Die `SLAVE1_API_KEY`/`SLAVE2_API_KEY` im Master müssen mit dem `LITELLM_MASTER_KEY` des jeweiligen Slaves übereinstimmen.
+The `SLAVE1_API_KEY`/`SLAVE2_API_KEY` values in the master must match the respective slave's `LITELLM_MASTER_KEY`.
 
-## Konfiguration aktualisieren
+## Updating the Configuration
 
 ## Kubernetes
 
-Das Multi-Instance-Setup kann auch auf Kubernetes betrieben werden. Master und Slaves laufen dann als separate Pods, kommunizieren über K8s-Service-DNS (`http://litellm-slave-1:4000`).
+The multi-instance setup can also run on Kubernetes. Master and slaves then run as separate pods, communicating via K8s service DNS (`http://litellm-slave-1:4000`).
 
-### K8s-Architektur
+### K8s Architecture
 
 ```
                       ┌──────────────┐
   Client ──────────►  │   MASTER     │  svc/litellm-master:4000
-                      │  (eigene     │
-                      │   Keys)      │
+                      │  (own        │
+                      │   keys)      │
                       └──────┬───────┘
                              │
                ┌──────────────┼──────────────┐
                ▼              ▼              ▼
       ┌────────────┐  ┌────────────┐  ┌────────────┐
-      │  Direkt    │  │  SLAVE 1   │  │  SLAVE 2   │
-      │ (eigene    │  │ svc/       │  │ svc/       │
-      │  Keys)     │  │ litellm-   │  │ litellm-   │
+      │  Direct    │  │  SLAVE 1   │  │  SLAVE 2   │
+      │ (own       │  │ svc/       │  │ svc/       │
+      │  keys)     │  │ litellm-   │  │ litellm-   │
       │            │  │ slave-1    │  │ slave-2    │
       └────────────┘  └────────────┘  └────────────┘
 ```
 
-Jeder Slave hat seinen eigenen Secret mit **unterschiedlichen API-Keys** (gleiche Secret-Variablen, andere Werte). Die Slaves teilen sich eine ConfigMap (`litellm-slave-config`) mit der base `config.yaml`.
+Each slave has its own secret with **different API keys** (same secret variables, different values). The slaves share a ConfigMap (`litellm-slave-config`) with the base `config.yaml`.
 
-### K8s-Manifeste
+### K8s Manifests
 
 ```
 multi-instance/k8s/
 ├── namespace.yaml              # Namespace: litellm-free-models
-├── kustomization.yaml          # Kustomize – alle Resourcen auf einmal
+├── kustomization.yaml          # Kustomize – all resources at once
 ├── master/
-│   ├── configmap.yaml          # Generiert (171 Deployments)
-│   ├── deployment.yaml         # Master-Pod
+│   ├── configmap.yaml          # Generated (171 deployments)
+│   ├── deployment.yaml         # Master pod
 │   └── service.yaml            # ClusterIP: litellm-master
 ├── slave/
-│   ├── configmap.yaml          # Generiert (base config, 99 Deployments)
-│   ├── deployment.yaml         # Slave-1 + Slave-2 Pods
+│   ├── configmap.yaml          # Generated (base config, 99 deployments)
+│   ├── deployment.yaml         # Slave-1 + Slave-2 pods
 │   └── service.yaml            # ClusterIP: litellm-slave-1, litellm-slave-2
-└── secret.yaml.template        # Template für 3 Secrets
+└── secret.yaml.template        # Template for 3 secrets
 
-# Redis (Deployment/Service) kommt als Kustomize-Base aus ../../k8s/redis/ –
-# gemeinsame Manifeste mit dem Single-Instance-Setup, keine Kopien.
-# litellm-redis-secret wird via `make k8s-secret` im Repo-Root erzeugt.
+# Redis (deployment/service) comes as a kustomize base from ../../k8s/redis/ –
+# shared manifests with the single-instance setup, no copies.
+# litellm-redis-secret is created via `make k8s-secret` in the repo root.
 ```
 
 ### Setup (K8s)
@@ -165,10 +165,10 @@ multi-instance/k8s/
 ```bash
 cd multi-instance
 
-# 1. Configs generieren (ConfigMaps für Master + Slaves)
+# 1. Generate configs (ConfigMaps for master + slaves)
 python3 generate-config.py
 
-# 2. Secrets anlegen (getrennt pro Instanz)
+# 2. Create secrets (separately per instance)
 kubectl create secret generic litellm-master-secrets \
   --namespace litellm-free-models \
   --from-literal=LITELLM_MASTER_KEY="sk-master-..." \
@@ -181,19 +181,19 @@ kubectl create secret generic litellm-master-secrets \
 kubectl create secret generic litellm-slave1-secrets \
   --namespace litellm-free-models \
   --from-literal=LITELLM_MASTER_KEY="sk-slave1-..." \
-  --from-literal=OPENROUTER_API_KEY="...anderer Account..." \
+  --from-literal=OPENROUTER_API_KEY="...different account..." \
   ...
 
 kubectl create secret generic litellm-slave2-secrets \
   --namespace litellm-free-models \
   --from-literal=LITELLM_MASTER_KEY="sk-slave2-..." \
-  --from-literal=OPENROUTER_API_KEY="...wieder anderer Account..." \
+  --from-literal=OPENROUTER_API_KEY="...yet another account..." \
   ...
 
-# 3. Deployen (Kustomize)
+# 3. Deploy (Kustomize)
 kubectl apply -k k8s/
 
-# Alternativ: einzeln
+# Alternative: individually
 kubectl apply -f k8s/namespace.yaml
 kubectl apply -f k8s/master/configmap.yaml
 kubectl apply -f k8s/master/deployment.yaml
@@ -202,18 +202,18 @@ kubectl apply -f k8s/slave/configmap.yaml
 kubectl apply -f k8s/slave/deployment.yaml
 kubectl apply -f k8s/slave/service.yaml
 
-# 4. Testen
+# 4. Test
 kubectl port-forward -n litellm-free-models svc/litellm-master 4000:4000
 curl http://localhost:4000/health/readiness
 ```
 
-**Wichtig**: Jeder Slave braucht SEINEN Secret mit ANDEREN API-Keys als Master und die anderen Slaves. Die ConfigMap `litellm-slave-config` ist für alle Slaves identisch (gleiche Modell-Definitionen).
+**Important**: each slave needs ITS OWN secret with DIFFERENT API keys than the master and the other slaves. The `litellm-slave-config` ConfigMap is identical for all slaves (same model definitions).
 
-### K8s-Konfiguration aktualisieren
+### Updating the K8s Configuration
 
 ```bash
 cd multi-instance
-python3 generate-config.py   # ConfigMaps neu generieren
+python3 generate-config.py   # regenerate ConfigMaps
 kubectl apply -f k8s/master/configmap.yaml
 kubectl apply -f k8s/slave/configmap.yaml
 kubectl rollout restart deployment/litellm-master -n litellm-free-models
@@ -221,41 +221,41 @@ kubectl rollout restart deployment/litellm-slave-1 -n litellm-free-models
 kubectl rollout restart deployment/litellm-slave-2 -n litellm-free-models
 ```
 
-## Konfiguration aktualisieren (Docker)
+## Updating the Configuration (Docker)
 
 ```bash
 cd multi-instance
-python3 generate-config.py   # master/config.yaml neu generieren
+python3 generate-config.py   # regenerate master/config.yaml
 docker compose restart master
 ```
 
-Slaves müssen nicht neugestartet werden – sie verwenden die base `config.yaml` per Volume-Mount.
+Slaves don't need to be restarted — they use the base `config.yaml` via a volume mount.
 
-## Dateistruktur
+## File Structure
 
 ```
 multi-instance/
-├── .env.example              # Projekt-.env: Redis-/Postgres-Passwörter (Compose-Interpolation)
+├── .env.example              # Project .env: Redis/Postgres passwords (Compose interpolation)
 ├── master/
-│   ├── config.yaml           # Docker-Config (99 base + 72 slave = 171)
-│   └── .env.example          # Master-Keys + SLAVE1/2_API_KEY
+│   ├── config.yaml           # Docker config (99 base + 72 slave = 171)
+│   └── .env.example          # Master keys + SLAVE1/2_API_KEY
 ├── slave1/
-│   └── .env.example          # Slave-1-Keys (andere Accounts)
+│   └── .env.example          # Slave-1 keys (different accounts)
 ├── slave2/
-│   └── .env.example          # Slave-2-Keys (andere Accounts)
-├── k8s/                      # Kubernetes-Manifeste
+│   └── .env.example          # Slave-2 keys (different accounts)
+├── k8s/                      # Kubernetes manifests
 │   ├── namespace.yaml
-│   ├── kustomization.yaml    # referenziert ../../k8s/redis/ als gemeinsame Base
+│   ├── kustomization.yaml    # references ../../k8s/redis/ as a shared base
 │   ├── master/
-│   │   ├── configmap.yaml    # K8s-ConfigMap (K8s-DNS-URLs, 171 dep.)
+│   │   ├── configmap.yaml    # K8s ConfigMap (K8s DNS URLs, 171 dep.)
 │   │   ├── deployment.yaml
 │   │   └── service.yaml
 │   ├── slave/
-│   │   ├── configmap.yaml    # Base config (K8s-indented, 69 dep.)
+│   │   ├── configmap.yaml    # base config (K8s-indented, 69 dep.)
 │   │   ├── deployment.yaml
 │   │   └── service.yaml
-│   └── secret.yaml.template  # 3 Secrets (master, slave1, slave2)
+│   └── secret.yaml.template  # 3 secrets (master, slave1, slave2)
 ├── generate-config.py        # Generator (Docker + K8s ConfigMaps)
-├── docker-compose.yaml       # Docker: Master + 2 Slaves + Redis + Postgres
-└── README.md                 # Diese Datei
+├── docker-compose.yaml       # Docker: master + 2 slaves + Redis + Postgres
+└── README.md                 # This file
 ```

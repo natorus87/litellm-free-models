@@ -8,39 +8,39 @@ assignees: ""
 
 ## Problem
 
-Welches Problem löst dieser Vorschlag? Wer ist betroffen?
+What problem does this proposal solve? Who is affected?
 
-Beispiel: "Cerebras ist heute immer ausgelastet, ein zweiter Anbieter
-für `gpt-oss-120b` würde Resilienz bringen."
+Example: "Cerebras is always saturated these days, a second provider
+for `gpt-oss-120b` would add resilience."
 
-## Idee
+## Idea
 
-Beschreibe den vorgeschlagenen Lösungsansatz so konkret wie möglich:
+Describe the proposed approach as concretely as possible:
 
-- Welcher Provider / welches Modell?
-- API-Format: `openrouter/`, `openai/` mit eigener `api_base`, `gemini/`, …?
-- Free-Tier-Link + RPM/RPD-Limits?
-- Auth-Verfahren: API-Key, OAuth, anonymer Free-Tier?
-- LiteLLM-Provider-Mapping vorhanden? (siehe
+- Which provider / which model?
+- API format: `openrouter/`, `openai/` with its own `api_base`, `gemini/`, …?
+- Free-tier link + RPM/RPD limits?
+- Auth method: API key, OAuth, anonymous free tier?
+- Existing LiteLLM provider mapping? (see
   [LiteLLM Providers](https://docs.litellm.ai/docs/providers))
 
-### Provider-Liste (falls neuer Provider)
+### Provider Info (if a new provider)
 
-| Feld            | Wert                                                |
+| Field           | Value                                                |
 | --------------- | --------------------------------------------------- |
-| Anzeigename     |                                                     |
-| API-Key Env-Var | (z.B. `MYPROVIDER_API_KEY`)                         |
-| API-Base        | (z.B. `https://api.myprovider.com/v1`)              |
-| RPM (Free)      |                                                     |
-| Auth            | API-Key / OAuth / anonymer Free-Tier                |
-| LiteLLM-Prefix  | (z.B. `myprovider/`)                                |
-| Free-Tier-Link  |                                                     |
-| Modelle         | (Liste der model_name → upstream-name Mappings)    |
+| Display name    |                                                     |
+| API key env var | (e.g. `MYPROVIDER_API_KEY`)                         |
+| API base        | (e.g. `https://api.myprovider.com/v1`)              |
+| RPM (free)      |                                                     |
+| Auth            | API key / OAuth / anonymous free tier               |
+| LiteLLM prefix  | (e.g. `myprovider/`)                                |
+| Free-tier link  |                                                     |
+| Models          | (list of model_name → upstream-name mappings)      |
 
-## Alternativen
+## Alternatives
 
-Welche Alternativen hast du erwogen? Warum sind sie nicht ideal?
+What alternatives did you consider? Why aren't they ideal?
 
-## Zusätzlicher Kontext
+## Additional Context
 
-Mockups, Beispiel-Requests, verwandte PRs / Issues, etc.
+Mockups, example requests, related PRs / issues, etc.
