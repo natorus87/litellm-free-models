@@ -104,7 +104,7 @@ jobs:
       - name: Render configs (for ConfigMaps + Compose mounts)
         run: |
           python3 render-config.py
-          cd multi-instance && python3 generate-config.py
+          (cd multi-instance && python3 generate-config.py)
           make k8s-configmap
 
       - name: Validate docker-compose.yaml
