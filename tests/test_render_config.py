@@ -141,7 +141,7 @@ class TestProviderFromBlock(unittest.TestCase):
     def test_hetzner_by_api_base(self):
         self.assertEqual(
             rc._provider_from_block(
-                "openai/Qwen/Qwen3.8-27B",
+                "openai/Qwen3.8-27B",
                 "https://inference.hetzner.com/api/v1",
             ),
             "hetzner",

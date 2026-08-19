@@ -1,5 +1,6 @@
 """Tests for providers_config.py."""
 import unittest
+from pathlib import Path
 
 from providers_config import PROVIDERS, ProviderConfig, get
 
@@ -38,6 +39,18 @@ class TestProviderConfigShape(unittest.TestCase):
     def test_get_unknown_raises(self):
         with self.assertRaises(KeyError):
             get("does-not-exist")
+
+    def test_single_instance_compose_passes_all_required_provider_keys(self):
+        compose = (Path(__file__).parent.parent / "docker-compose.yaml").read_text()
+        for name, provider in PROVIDERS.items():
+            if not provider.required or not provider.env_var:
+                continue
+            with self.subTest(provider=name):
+                self.assertIn(
+                    f"{provider.env_var}=${{{provider.env_var}}}",
+                    compose,
+                    f"docker-compose.yaml does not pass {provider.env_var}",
+                )
 
 
 class TestOVHcloudAnonymous(unittest.TestCase):

@@ -90,7 +90,7 @@ Full env-var list including `REDIS_*`/`POSTGRES_*`: see `.env.example` (that fil
 - **NVIDIA**: deployment name = `openai/openai/<model>` → sends `openai/<model>` to NVIDIA. Kimi runs under `moonshotai/kimi-k2-instruct` (different from `kimi-k2.6` on OpenRouter/Cloudflare).
 - **GitHub Models**: retired by GitHub on 2026-07-30 and removed after live tests returned HTTP 404/410. The local `GITHUB_TOKEN` is no longer consumed.
 - **Poolside**: OpenAI-compatible at `https://inference.poolside.ai/v1`; `poolside/laguna-s-2.1` is free for a limited time. Poolside does not publish preview limits, so the router uses a conservative 10 RPM / 200K TPM budget (`*`).
-- **Hetzner Experiments**: OpenAI-compatible at `https://inference.hetzner.com/api/v1`; free, best-effort, and explicitly without production SLA. Configured aliases are `qwen3.6-35b-a3b` (`Qwen/Qwen3.6-35B-A3B-FP8`) and multimodal `qwen3.8-27b` (`Qwen/Qwen3.8-27B`), both with 262,144-token context advertised by Hetzner. Limits are unpublished, so routing starts at 5 RPM / 200K TPM (`*`).
+- **Hetzner Experiments**: OpenAI-compatible at `https://inference.hetzner.com/api/v1`; free, best-effort, and explicitly without production SLA. Configured aliases are `qwen3.6-35b-a3b` (`Qwen/Qwen3.6-35B-A3B-FP8`) and multimodal `qwen3.8-27b` (`Qwen3.8-27B`), both with 262,144-token context advertised by Hetzner. Limits are unpublished, so routing starts at 5 RPM / 200K TPM (`*`).
 - **Z.AI**: native LiteLLM `zai/` provider; free `glm-4.5-flash`, `glm-4.7-flash`, and vision-capable `glm-4.6v-flash`. The API omits these IDs from `/models` although they are callable. Limits are unpublished, so routing starts at 1 RPM / 100K TPM (`*`).
 - **ElevenLabs**: native LiteLLM `elevenlabs/` provider; `scribe_v2` is a second deployment behind `audio-transcription`. Free-plan TTS cannot use premade/library voices and is therefore not routed. Free output is noncommercial; published output requires attribution.
 - **OpenCode Zen**: endpoint `https://opencode.ai/zen/v1`, models: `deepseek-v4-flash-free`, `nemotron-3-ultra-free`, `big-pickle`, `north-mini-code-free`.
@@ -258,7 +258,7 @@ The authoritative source is `config.template.yaml` (`router_settings.fallbacks` 
 │       ├── service.yaml
 │       └── secret.yaml.template
 │
-├── tests/                       # 127 unit tests (unittest, stdlib-only)
+├── tests/                       # 128 unit tests (unittest, stdlib-only)
 │   └── test_config_invariants.py  # fallback isolation, chat ≥2-provider rule, tpm/rpm location, Redis markers
 │
 ├── .github/workflows/

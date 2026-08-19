@@ -1186,7 +1186,7 @@ model_list:
 
   - model_name: qwen3.8-27b
     litellm_params:
-      model: openai/Qwen/Qwen3.8-27B
+      model: openai/Qwen3.8-27B
       api_key: os.environ/HETZNER_VLLM_API_KEY
       api_base: https://inference.hetzner.com/api/v1
       tpm: 200000
