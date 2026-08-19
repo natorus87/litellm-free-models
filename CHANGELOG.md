@@ -14,6 +14,9 @@ Semantic Versioning.
 
 ### Fixed
 
+- Made OpenRouter `embedding-liquid` fail fast (`timeout: 5`, no retry) so a
+  free-tier `Retry-After: 60` response cannot hide a one-minute stall behind
+  the successful retry's sub-second provider duration.
 - Prevented slow `gpt-oss-120b` providers from consuming the former 120-second
   per-attempt timeout under concurrent uncached load. Both GPT-OSS pools now
   use a 20-second deployment timeout and one retry; router defaults use a

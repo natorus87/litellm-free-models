@@ -4,7 +4,7 @@
 
 A [LiteLLM](https://github.com/BerriAI/litellm) proxy that aggregates **exclusively free AI inference APIs** from 16 providers — with automatic load balancing, cooldown, and fallback chains. The same chat model (e.g. `gpt-oss-120b`) is covered by multiple providers to bypass individual free-tier rate limits; provider-specific aliases also expose embeddings and audio transcription.
 
-![Tests](https://img.shields.io/badge/tests-128_passing-brightgreen)
+![Tests](https://img.shields.io/badge/tests-129_passing-brightgreen)
 ![License](https://img.shields.io/badge/license-MIT-blue)
 ![Python](https://img.shields.io/badge/python-3.10%2B-blue)
 ![LiteLLM](https://img.shields.io/badge/litellm-proxy-orange)
@@ -44,7 +44,7 @@ A [LiteLLM](https://github.com/BerriAI/litellm) proxy that aggregates **exclusiv
 - **Complete savings sheet** — [MODEL_PRICING.md](MODEL_PRICING.md) gives every configured alias an official, LiteLLM-database, or clearly marked estimated reference price without corrupting real `$0` spend tracking.
 - **Multi-instance setup** — Master + 2 Slaves in `multi-instance/` triple the effective rate limits (for separate hosts/IPs, see [Multi-Instance](#-multi-instance)).
 - **Template pipeline** — `config.template.yaml` is the single source of truth; `render-config.py` renders `config.yaml` from it with `{{ENV_VAR}}` substitution, provider filtering, and fallback-target validation.
-- **128 unit tests** — including structural invariant tests (fallback targets must exist, chat models follow the ≥ 2-provider rule, embeddings cannot cross-fallback).
+- **129 unit tests** — including structural invariant tests (fallback targets must exist, chat models follow the ≥ 2-provider rule, embeddings cannot cross-fallback).
 
 ---
 
@@ -301,7 +301,11 @@ curl http://localhost:4444/v1/embeddings \
 Each alias deliberately has an empty fallback chain. Never mix vectors from
 different embedding models in one index: their dimensions and semantic vector
 spaces are incompatible. Identical embedding requests participate in the
-five-minute response cache.
+five-minute response cache. `embedding-liquid` additionally fails fast after
+five seconds without an automatic retry: OpenRouter free endpoints can return
+`Retry-After: 60`, which would otherwise turn a throttled bulk-index request
+into a hidden one-minute pause. Pace or batch reindexing requests, or use a
+dedicated embedding endpoint for sustained workloads.
 
 ---
 
@@ -470,7 +474,7 @@ Recommendations for operating the proxy (nothing is force-enabled by default):
 ## 🧪 Tests
 
 ```bash
-make test                # 128 unit tests, ~1s
+make test                # 129 unit tests, ~1s
 ```
 
 The suite covers five modules:
@@ -504,7 +508,7 @@ The tests use only the Python standard library (`unittest`).
 | `make docker-build` / `make docker-run`                  | Build / run the custom image (standalone, without Redis) |
 | `make backup-db` / `make restore-db`                     | Dump / restore the Compose Postgres DB (`./backups/`)  |
 | `make opencode-config`                                   | Create/update the `litellm` provider in `~/.config/opencode/opencode.json` from live models |
-| `make test`                                              | Run 128 unit tests                                      |
+| `make test`                                              | Run 129 unit tests                                      |
 | `make lint` / `make format`                              | Run ruff linter / formatter                            |
 | `make clean`                                             | Remove generated/temporary files (backups, reports)    |
 | `make install-dev`                                       | Install dev dependencies and pre-commit hooks          |

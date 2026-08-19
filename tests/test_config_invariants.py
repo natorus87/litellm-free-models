@@ -167,11 +167,21 @@ class TestFailFastRouting(unittest.TestCase):
             mode = block.get("mode", "chat")
             if mode not in expected:
                 continue
+            if block["model_name"] == "embedding-liquid":
+                continue
             block_text = "".join(block["lines"])
             self.assertIn(f"      timeout: {expected[mode]}\n", block_text)
             self.assertIn("      num_retries: 1\n", block_text)
             checked += 1
         self.assertGreaterEqual(checked, 1)
+
+    def test_openrouter_liquid_embedding_fails_fast_without_retry_after_sleep(self):
+        _, blocks = _parse_template()
+        liquid = [b for b in blocks if b["model_name"] == "embedding-liquid"]
+        self.assertEqual(len(liquid), 1)
+        block_text = "".join(liquid[0]["lines"])
+        self.assertIn("      timeout: 5\n", block_text)
+        self.assertIn("      num_retries: 0\n", block_text)
 
     def test_router_defaults_fail_fast(self):
         text = TEMPLATE.read_text(encoding="utf-8")

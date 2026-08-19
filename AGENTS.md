@@ -258,7 +258,7 @@ The authoritative source is `config.template.yaml` (`router_settings.fallbacks` 
 │       ├── service.yaml
 │       └── secret.yaml.template
 │
-├── tests/                       # 128 unit tests (unittest, stdlib-only)
+├── tests/                       # 129 unit tests (unittest, stdlib-only)
 │   └── test_config_invariants.py  # fallback isolation, chat ≥2-provider rule, tpm/rpm location, Redis markers
 │
 ├── .github/workflows/
@@ -345,7 +345,7 @@ docker compose up -d
 15. **Sync PR pipeline is conservative**: `--apply` only adds/updates costs; model removals stay manual (catalog flapping). Without `SYNC_*` secrets the run fails loudly.
 16. **`opencode-config.py` writes schema-compliant output**: per the official schema (`https://opencode.ai/config.json` → `$defs.ProviderConfig`, `additionalProperties: false`), `apiKey`/`baseURL`/`timeout`/`chunkTimeout` live under `options`, not at the top level — an `apiKey` outside `options` is schema-invalid. When updating an existing provider entry, its `options.baseURL` is preserved unless `--host`/`--port`/`--base-url` is explicitly set (prevents a re-run from silently replacing a LAN-reachable address with the local default).
 17. **Embedding aliases never cross-fallback**: `embedding-general` (Gemini, 3072d), `embedding-multilingual` (Cohere, 1024d), `embedding-code` (Codestral, 1536d), `embedding-nvidia-text` (2048d), multimodal `embedding-nvidia-vl` (2048d), and `embedding-liquid` (1024d) use explicit empty fallback chains so the generic chat catch-all cannot mix incompatible vector spaces. Embedding responses are eligible for the 300s Redis cache.
-18. **Latency is tiered by workload**: load-tested `gpt-oss-120b`, `gpt-oss-20b`, `llama-3.3-70b-instruct`, and `gemma-4-31b-it` deployments use a 20s per-attempt timeout; embeddings use 15s, speech 60s, transcription 120s, and other chat models inherit 30s. Every tier gets one retry; the router waits 1s and cools a failed deployment for 60s. Load tests must use unique prompts plus `{"cache": {"no-cache": true}}`; repeated identical prompts only measure Redis latency.
+18. **Latency is tiered by workload**: load-tested `gpt-oss-120b`, `gpt-oss-20b`, `llama-3.3-70b-instruct`, and `gemma-4-31b-it` deployments use a 20s per-attempt timeout; embeddings normally use 15s, speech 60s, transcription 120s, and other chat models inherit 30s. The exception is OpenRouter `embedding-liquid`: 5s and zero retries prevent a provider `Retry-After: 60` from stalling bulk indexing while exposing only the successful retry latency. Other tiers get one retry; the router waits at least 1s and cools a failed deployment for 60s. Load tests must use unique prompts plus `{"cache": {"no-cache": true}}`; repeated identical prompts only measure Redis latency. Capture `x-litellm-attempted-fallbacks` and `x-litellm-fallback-errors` alongside retries because the winning provider's duration does not include earlier fallback attempts.
 
 ---
 

@@ -1678,8 +1678,11 @@ model_list:
       api_key: os.environ/OPENROUTER_API_KEY
       tpm: 200000
       rpm: 1
-      timeout: 15
-      num_retries: 1
+      # OpenRouter can return Retry-After: 60 for this free endpoint. Retrying
+      # would stall bulk indexing for a minute while reporting only the fast
+      # final attempt, so this latency-sensitive alias deliberately fails fast.
+      timeout: 5
+      num_retries: 0
     model_info:
       input_cost_per_token: 0
       output_cost_per_token: 0
