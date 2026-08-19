@@ -17,6 +17,10 @@ Semantic Versioning.
 - Verified the fix with 24 unique requests at concurrency four: 24/24
   succeeded, maximum latency fell from over 135 seconds to 41.33 seconds,
   and the complete run fell from 315.07 seconds to 43.67 seconds.
+- Extended the timeout policy by workload: live-tested Llama 3.3 70B and
+  Gemma 4 31B pools now fail over after 20 seconds, embeddings after 15
+  seconds, while speech (60s) and transcription (120s) retain media-safe
+  limits. Other chat deployments inherit the 30-second global ceiling.
 
 ## [0.2.0] - 2026-08-19
 

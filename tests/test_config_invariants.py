@@ -138,17 +138,40 @@ class TestTpmRpmInLitellmParams(unittest.TestCase):
 class TestFailFastRouting(unittest.TestCase):
     """The GPT-OSS primary/fallback pools must not regress to long attempts."""
 
-    def test_gpt_oss_deployments_have_short_timeout_and_one_retry(self):
+    def test_latency_sensitive_chat_deployments_fail_fast(self):
         _, blocks = _parse_template()
         checked = 0
         for block in blocks:
-            if block["model_name"] not in {"gpt-oss-120b", "gpt-oss-20b"}:
+            if block["model_name"] not in {
+                "gpt-oss-120b",
+                "gpt-oss-20b",
+                "llama-3.3-70b-instruct",
+                "gemma-4-31b-it",
+            }:
                 continue
             block_text = "".join(block["lines"])
             self.assertIn("      timeout: 20\n", block_text)
             self.assertIn("      num_retries: 1\n", block_text)
             checked += 1
         self.assertGreaterEqual(checked, 2)
+
+    def test_non_chat_timeouts_are_mode_appropriate(self):
+        expected = {
+            "embedding": 15,
+            "audio_transcription": 120,
+            "audio_speech": 60,
+        }
+        _, blocks = _parse_template()
+        checked = 0
+        for block in blocks:
+            mode = block.get("mode", "chat")
+            if mode not in expected:
+                continue
+            block_text = "".join(block["lines"])
+            self.assertIn(f"      timeout: {expected[mode]}\n", block_text)
+            self.assertIn("      num_retries: 1\n", block_text)
+            checked += 1
+        self.assertGreaterEqual(checked, 1)
 
     def test_router_defaults_fail_fast(self):
         text = TEMPLATE.read_text(encoding="utf-8")
