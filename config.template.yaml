@@ -39,6 +39,8 @@ model_list:
       api_key: {{CEREBRAS_API_KEY}}
       tpm: 1000000
       rpm: 30
+      timeout: 20
+      num_retries: 1
     model_info:
       input_cost_per_token: 3.9e-08
       output_cost_per_token: 1.8e-07
@@ -50,6 +52,8 @@ model_list:
       api_key: {{GROQ_API_KEY}}
       tpm: 8000
       rpm: 2
+      timeout: 20
+      num_retries: 1
     model_info:
       input_cost_per_token: 3.9e-08
       output_cost_per_token: 1.8e-07
@@ -62,6 +66,8 @@ model_list:
       api_base: {{CLOUDFLARE_API_BASE}}
       tpm: 500000
       rpm: 10
+      timeout: 20
+      num_retries: 1
     model_info:
       input_cost_per_token: 3.9e-08
       output_cost_per_token: 1.8e-07
@@ -74,6 +80,8 @@ model_list:
       api_base: https://integrate.api.nvidia.com/v1
       tpm: 500000
       rpm: 40
+      timeout: 20
+      num_retries: 1
     model_info:
       input_cost_per_token: 3.9e-08
       output_cost_per_token: 1.8e-07
@@ -86,6 +94,8 @@ model_list:
       api_base: https://oai.endpoints.kepler.ai.cloud.ovh.net/v1
       tpm: 200000
       rpm: 2
+      timeout: 20
+      num_retries: 1
     model_info:
       input_cost_per_token: 3.9e-08
       output_cost_per_token: 1.8e-07
@@ -97,6 +107,8 @@ model_list:
       api_key: {{HF_TOKEN}}
       tpm: 200000
       rpm: 30
+      timeout: 20
+      num_retries: 1
     model_info:
       input_cost_per_token: 3.9e-08
       output_cost_per_token: 1.8e-07
@@ -163,6 +175,8 @@ model_list:
       api_key: {{OPENROUTER_API_KEY}}
       tpm: 200000
       rpm: 1
+      timeout: 20
+      num_retries: 1
     model_info:
       input_cost_per_token: 2.9e-08
       output_cost_per_token: 1.4e-07
@@ -174,6 +188,8 @@ model_list:
       api_key: {{GROQ_API_KEY}}
       tpm: 8000
       rpm: 2
+      timeout: 20
+      num_retries: 1
     model_info:
       input_cost_per_token: 2.9e-08
       output_cost_per_token: 1.4e-07
@@ -186,6 +202,8 @@ model_list:
       api_base: {{CLOUDFLARE_API_BASE}}
       tpm: 500000
       rpm: 10
+      timeout: 20
+      num_retries: 1
     model_info:
       input_cost_per_token: 2.9e-08
       output_cost_per_token: 1.4e-07
@@ -198,6 +216,8 @@ model_list:
       api_base: https://integrate.api.nvidia.com/v1
       tpm: 500000
       rpm: 40
+      timeout: 20
+      num_retries: 1
     model_info:
       input_cost_per_token: 2.9e-08
       output_cost_per_token: 1.4e-07
@@ -210,6 +230,8 @@ model_list:
       api_base: https://oai.endpoints.kepler.ai.cloud.ovh.net/v1
       tpm: 200000
       rpm: 2
+      timeout: 20
+      num_retries: 1
     model_info:
       input_cost_per_token: 2.9e-08
       output_cost_per_token: 1.4e-07
@@ -221,6 +243,8 @@ model_list:
       api_key: {{HF_TOKEN}}
       tpm: 200000
       rpm: 30
+      timeout: 20
+      num_retries: 1
     model_info:
       input_cost_per_token: 2.9e-08
       output_cost_per_token: 1.4e-07
@@ -232,6 +256,8 @@ model_list:
       api_base: https://api.llm7.io/v1
       tpm: 200000
       rpm: 40
+      timeout: 20
+      num_retries: 1
     model_info:
       input_cost_per_token: 0
       output_cost_per_token: 0
@@ -2054,10 +2080,12 @@ router_settings:
   redis_port: os.environ/REDIS_PORT
   redis_password: os.environ/REDIS_PASSWORD
   # END REDIS ROUTER
-  num_retries: 2
-  retry_after: 5
-  allowed_fails: 3
-  cooldown_time: 30
+  # Fail fast under sustained free-tier load: one alternate deployment attempt,
+  # then the model fallback chain. A failing backend is removed for one minute.
+  num_retries: 1
+  retry_after: 1
+  allowed_fails: 1
+  cooldown_time: 60
 
   fallbacks:
     # Explicit empty chains prevent the generic chat fallback from handling
@@ -2135,8 +2163,11 @@ router_settings:
 litellm_settings:
   drop_params: true
   set_verbose: false
-  request_timeout: 120
-  num_retries: 2
+  # Per-attempt ceiling for models without a stricter deployment timeout.
+  # gpt-oss-120b and its first fallback gpt-oss-20b use 20s above, keeping the
+  # normal retry+fallback path below common 90-120s client deadlines.
+  request_timeout: 30
+  num_retries: 1
 
   # BEGIN REDIS CACHE
   # ─── Redis Cache ──────────────────────────────────────────────────────────

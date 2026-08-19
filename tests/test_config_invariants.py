@@ -135,6 +135,33 @@ class TestTpmRpmInLitellmParams(unittest.TestCase):
                           f"has no rpm in litellm_params")
 
 
+class TestFailFastRouting(unittest.TestCase):
+    """The GPT-OSS primary/fallback pools must not regress to long attempts."""
+
+    def test_gpt_oss_deployments_have_short_timeout_and_one_retry(self):
+        _, blocks = _parse_template()
+        checked = 0
+        for block in blocks:
+            if block["model_name"] not in {"gpt-oss-120b", "gpt-oss-20b"}:
+                continue
+            block_text = "".join(block["lines"])
+            self.assertIn("      timeout: 20\n", block_text)
+            self.assertIn("      num_retries: 1\n", block_text)
+            checked += 1
+        self.assertGreaterEqual(checked, 2)
+
+    def test_router_defaults_fail_fast(self):
+        text = TEMPLATE.read_text(encoding="utf-8")
+        router = text.split("router_settings:", 1)[1].split("litellm_settings:", 1)[0]
+        for setting in (
+            "  num_retries: 1\n",
+            "  retry_after: 1\n",
+            "  allowed_fails: 1\n",
+            "  cooldown_time: 60\n",
+        ):
+            self.assertIn(setting, router)
+
+
 class TestSingleDeploymentWarnings(unittest.TestCase):
     """After the provider filter, the renderer should warn if a
     model_name has only 1 deployment left (exceptions excluded)."""

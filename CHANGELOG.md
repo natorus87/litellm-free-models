@@ -3,6 +3,21 @@
 All notable changes to this project are documented here. The project follows
 Semantic Versioning.
 
+## [Unreleased]
+
+### Fixed
+
+- Prevented slow `gpt-oss-120b` providers from consuming the former 120-second
+  per-attempt timeout under concurrent uncached load. Both GPT-OSS pools now
+  use a 20-second deployment timeout and one retry; router defaults use a
+  one-second retry delay, cooldown after one failure for 60 seconds, and a
+  30-second ceiling for other deployments.
+- Documented that routing/load tests must use unique prompts and explicitly
+  bypass the five-minute Redis response cache.
+- Verified the fix with 24 unique requests at concurrency four: 24/24
+  succeeded, maximum latency fell from over 135 seconds to 41.33 seconds,
+  and the complete run fell from 315.07 seconds to 43.67 seconds.
+
 ## [0.2.0] - 2026-08-19
 
 ### Added

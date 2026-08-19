@@ -199,13 +199,13 @@ router_settings:
   routing_strategy: usage-based-routing-v2   # rpm/tpm-budget-aware
   # redis_host/port/password (os.environ/REDIS_*) — only rendered if
   # REDIS_HOST is set; then cross-instance tracking + cooldowns
-  num_retries: 2
-  retry_after: 5
-  allowed_fails: 3
-  cooldown_time: 30
+  num_retries: 1
+  retry_after: 1
+  allowed_fails: 1
+  cooldown_time: 60
 ```
 
-`tpm`/`rpm` live per-deployment in **`litellm_params`** (not top level!) so the router evaluates them. An invariant test enforces this.
+`tpm`/`rpm` live per-deployment in **`litellm_params`** (not top level!) so the router evaluates them. An invariant test enforces this. Every `gpt-oss-120b` and `gpt-oss-20b` deployment additionally has `timeout: 20` and `num_retries: 1`: live uncached load testing showed that the former 120s per-attempt ceiling could consume the caller's entire deadline before a healthy fallback was tried.
 
 ### Fallback Chains
 
@@ -253,7 +253,7 @@ The authoritative source is `config.template.yaml` (`router_settings.fallbacks` 
 │       ├── service.yaml
 │       └── secret.yaml.template
 │
-├── tests/                       # 122 unit tests (unittest, stdlib-only)
+├── tests/                       # 124 unit tests (unittest, stdlib-only)
 │   └── test_config_invariants.py  # fallback isolation, chat ≥2-provider rule, tpm/rpm location, Redis markers
 │
 ├── .github/workflows/
@@ -340,6 +340,7 @@ docker compose up -d
 15. **Sync PR pipeline is conservative**: `--apply` only adds/updates costs; model removals stay manual (catalog flapping). Without `SYNC_*` secrets the run fails loudly.
 16. **`opencode-config.py` writes schema-compliant output**: per the official schema (`https://opencode.ai/config.json` → `$defs.ProviderConfig`, `additionalProperties: false`), `apiKey`/`baseURL`/`timeout`/`chunkTimeout` live under `options`, not at the top level — an `apiKey` outside `options` is schema-invalid. When updating an existing provider entry, its `options.baseURL` is preserved unless `--host`/`--port`/`--base-url` is explicitly set (prevents a re-run from silently replacing a LAN-reachable address with the local default).
 17. **Embedding aliases never cross-fallback**: `embedding-general` (Gemini, 3072d), `embedding-multilingual` (Cohere, 1024d), `embedding-code` (Codestral, 1536d), `embedding-nvidia-text` (2048d), multimodal `embedding-nvidia-vl` (2048d), and `embedding-liquid` (1024d) use explicit empty fallback chains so the generic chat catch-all cannot mix incompatible vector spaces. Embedding responses are eligible for the 300s Redis cache.
+18. **GPT-OSS fails fast under load**: all `gpt-oss-120b` and `gpt-oss-20b` deployments have a 20s per-attempt timeout and one retry. Router-wide defaults are one retry after 1s, cooldown after one failure for 60s, and a 30s ceiling for other deployments. Load tests must use unique prompts plus `{"cache": {"no-cache": true}}`; repeated identical prompts only measure Redis latency.
 
 ---
 

@@ -4,7 +4,7 @@
 
 A [LiteLLM](https://github.com/BerriAI/litellm) proxy that aggregates **exclusively free AI inference APIs** from 15 providers — with automatic load balancing, cooldown, and fallback chains. The same chat model (e.g. `gpt-oss-120b`) is covered by multiple providers to bypass individual free-tier rate limits; provider-specific aliases also expose embeddings and audio transcription.
 
-![Tests](https://img.shields.io/badge/tests-122_passing-brightgreen)
+![Tests](https://img.shields.io/badge/tests-124_passing-brightgreen)
 ![License](https://img.shields.io/badge/license-MIT-blue)
 ![Python](https://img.shields.io/badge/python-3.10%2B-blue)
 ![LiteLLM](https://img.shields.io/badge/litellm-proxy-orange)
@@ -38,13 +38,13 @@ A [LiteLLM](https://github.com/BerriAI/litellm) proxy that aggregates **exclusiv
 
 - **15 providers, 69 model aliases** — including Z.AI Flash, ElevenLabs Scribe v2, and three free OpenRouter embeddings.
 - **Rate-limit-aware load balancing** — `usage-based-routing-v2` routes to deployments that still have `tpm`/`rpm` budget (a 1-RPM OpenRouter deployment no longer receives as much traffic as a 40-RPM NVIDIA one). With Redis, usage and cooldowns are tracked **across all instances/replicas**.
-- **Fallback chains** — each model has a prioritized list of fallbacks (e.g. `gpt-oss-120b` → `gpt-oss-20b` → `llama-3.3-70b-instruct`).
+- **Fail-fast fallback chains** — each model has a prioritized list of fallbacks (e.g. `gpt-oss-120b` → `gpt-oss-20b` → `llama-3.3-70b-instruct`). The two GPT-OSS pools use a 20s per-attempt ceiling; one retry and a 60s cooldown prevent a stalled free backend from consuming the client's full 120s deadline.
 - **Shared Redis cache** — response cache (5 min TTL, see [Response Cache](#-response-cache)) + virtual-key auth cache across replicas. Fully optional: without `REDIS_HOST` the config renders Redis-free.
 - **Anonymous OVHcloud tier** — runs **without an API key** (2 RPM/IP/model) and is ready to use out of the box.
 - **Complete savings sheet** — [MODEL_PRICING.md](MODEL_PRICING.md) gives every configured alias an official, LiteLLM-database, or clearly marked estimated reference price without corrupting real `$0` spend tracking.
 - **Multi-instance setup** — Master + 2 Slaves in `multi-instance/` triple the effective rate limits (for separate hosts/IPs, see [Multi-Instance](#-multi-instance)).
 - **Template pipeline** — `config.template.yaml` is the single source of truth; `render-config.py` renders `config.yaml` from it with `{{ENV_VAR}}` substitution, provider filtering, and fallback-target validation.
-- **122 unit tests** — including structural invariant tests (fallback targets must exist, chat models follow the ≥ 2-provider rule, embeddings cannot cross-fallback).
+- **124 unit tests** — including structural invariant tests (fallback targets must exist, chat models follow the ≥ 2-provider rule, embeddings cannot cross-fallback).
 
 ---
 
@@ -125,7 +125,7 @@ Response: JSON object with `choices[0].message.content` (OpenAI-compatible forma
                   │       LiteLLM Proxy (:4000 internal)    │
                   │     Routing: usage-based-routing-v2     │
    Client ──────► │     69 model_names, 155 deployments      │
-   (Port 4444)   │     Cooldown 30s, Retries 2             │
+   (Port 4444)   │     Cooldown 60s, Retries 1             │
                   └────────────┬────────────────────────────┘
                                │
         ┌──────────┬───────────┼───────────┬──────────┬────────┐
@@ -468,7 +468,7 @@ Recommendations for operating the proxy (nothing is force-enabled by default):
 ## 🧪 Tests
 
 ```bash
-make test                # 122 unit tests, ~1s
+make test                # 124 unit tests, ~1s
 ```
 
 The suite covers five modules:
@@ -502,7 +502,7 @@ The tests use only the Python standard library (`unittest`).
 | `make docker-build` / `make docker-run`                  | Build / run the custom image (standalone, without Redis) |
 | `make backup-db` / `make restore-db`                     | Dump / restore the Compose Postgres DB (`./backups/`)  |
 | `make opencode-config`                                   | Create/update the `litellm` provider in `~/.config/opencode/opencode.json` from live models |
-| `make test`                                              | Run 122 unit tests                                      |
+| `make test`                                              | Run 124 unit tests                                      |
 | `make lint` / `make format`                              | Run ruff linter / formatter                            |
 | `make clean`                                             | Remove generated/temporary files (backups, reports)    |
 | `make install-dev`                                       | Install dev dependencies and pre-commit hooks          |
