@@ -360,6 +360,34 @@ class TestOpenRouterFreeFilter(unittest.TestCase):
         ]}
         self.assertEqual(fsm._filter_free_openrouter(data), ["x/y:free"])
 
+    def test_fetch_includes_free_embeddings_but_marks_them_non_chat(self):
+        import unittest.mock as mock
+
+        chat = {"data": [{
+            "id": "chat/model:free",
+            "pricing": {"prompt": "0", "completion": "0"},
+        }]}
+        embeddings = {"data": [{
+            "id": "nvidia/embed:free",
+            "pricing": {"prompt": "0", "completion": "0"},
+        }]}
+        with mock.patch.object(fsm, "http_get_json", side_effect=[chat, embeddings]):
+            models = fsm.fetch_openrouter("test-key")
+        self.assertEqual(models, ["chat/model:free", "nvidia/embed:free"])
+        self.assertEqual(fsm.OPENROUTER_NON_CHAT_MODELS, {"nvidia/embed:free"})
+
+    def test_embedding_catalog_entries_do_not_enter_chat_groups(self):
+        fsm.OPENROUTER_NON_CHAT_MODELS.clear()
+        fsm.OPENROUTER_NON_CHAT_MODELS.add("nvidia/embed:free")
+        raw = {
+            "openrouter": ["nvidia/embed:free", "shared/chat:free"],
+            "nvidia": ["nvidia/embed", "shared/chat"],
+        }
+        groups = fsm.build_groups(raw)
+        self.assertNotIn("embed", groups)
+        self.assertIn("shared", groups)
+        fsm.OPENROUTER_NON_CHAT_MODELS.clear()
+
 
 class TestCohereModelParsing(unittest.TestCase):
     """Regression: an earlier version collected the ENDPOINT names
@@ -392,17 +420,6 @@ class TestGoogleModelParsing(unittest.TestCase):
         ]}
         out = fsm._parse_google_models(data)
         self.assertEqual(out, ["gemma-4-31b-it", "no-methods-field"])
-
-
-class TestGithubModelParsing(unittest.TestCase):
-    def test_handles_bare_list_response(self):
-        data = [{"name": "Meta-Llama-3.3-70B-Instruct"}, {"id": "Mistral-large-2411"}]
-        out = fsm._parse_github_models(data)
-        self.assertEqual(out, ["Meta-Llama-3.3-70B-Instruct", "Mistral-large-2411"])
-
-    def test_handles_dict_response(self):
-        data = {"data": [{"id": "model-a"}]}
-        self.assertEqual(fsm._parse_github_models(data), ["model-a"])
 
 
 class TestParseConfigBlockBoundaries(unittest.TestCase):
@@ -712,6 +729,13 @@ class TestFindStaleDeployments(unittest.TestCase):
             "    litellm_params:\n"
             "      model: openrouter/openrouter/free\n"
             "      api_key: {{OPENROUTER_API_KEY}}\n"
+            "\n"
+            "  - model_name: embedding-general\n"
+            "    litellm_params:\n"
+            "      model: gemini/gemini-embedding-001\n"
+            "      api_key: {{GEMINI_API_KEY}}\n"
+            "    model_info:\n"
+            "      mode: embedding\n"
         )
         return p
 
@@ -723,6 +747,7 @@ class TestFindStaleDeployments(unittest.TestCase):
                 "cerebras": ["llama-4-maverick"],          # gpt-oss missing -> stale
                 "groq": ["openai/gpt-oss-120b"],           # present
                 "openrouter": ["whatever:free"],           # exempt (openrouter-free)
+                "google-ai": ["some-chat-model"],          # embedding -> exempt
             }
             stale = fsm.find_stale_deployments(tmpl, raw, partial=set())
             self.assertEqual(len(stale), 1)
@@ -748,6 +773,45 @@ class TestFindStaleDeployments(unittest.TestCase):
             raw = {"cerebras": ["GPT-OSS-120B"]}
             stale = fsm.find_stale_deployments(tmpl, raw, partial=set())
             self.assertEqual(stale, [])
+
+
+class TestPricingReference(unittest.TestCase):
+    def test_moe_estimate_uses_active_parameter_count(self):
+        ic, oc, basis = fsm.estimate_token_reference("model-397b-a17b")
+        self.assertEqual((ic, oc), (0.20, 0.80))
+        self.assertIn("17B", basis)
+
+    def test_embedding_estimate_has_no_output_price(self):
+        ic, oc, basis = fsm.estimate_token_reference("custom-embed", "embedding")
+        self.assertEqual((ic, oc), (0.10, 0.0))
+        self.assertIn("embedding", basis)
+
+    def test_positive_db_reference_ignores_zero_only_entries(self):
+        fsm._reset_pricing_index()
+        pricing = {
+            "openrouter/vendor/model-x": {
+                "input_cost_per_token": 0,
+                "output_cost_per_token": 0,
+            }
+        }
+        deployments = [{
+            "provider": "openrouter",
+            "model_id": "openrouter/vendor/model-x:free",
+        }]
+        self.assertIsNone(fsm._positive_db_reference(pricing, deployments))
+
+    def test_generated_sheet_contains_every_configured_alias(self):
+        from pathlib import Path
+
+        template = Path(__file__).resolve().parents[1] / "config.template.yaml"
+        doc = fsm.build_pricing_reference(template, {})
+        rc = fsm._load_render_config_module()
+        _, _, blocks = rc.parse_blocks(template.read_text().splitlines(keepends=True))
+        for alias in {block["model_name"] for block in blocks}:
+            self.assertIn(f"`{alias}`", doc)
+        self.assertIn("`cloudflare-image`", doc)
+        self.assertIn("official: Groq", doc)
+        self.assertIn("estimate:", doc)
 
 
 if __name__ == "__main__":

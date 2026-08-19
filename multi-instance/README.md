@@ -29,15 +29,15 @@ Extends the [main setup](../README.md) to **3 independent LiteLLM instances** th
 ```
 
 **Master** (multi-instance/master/config.yaml):
-- **99 direct deployments** using the master's API keys
-- **72 slave deployments** (36 models × 2 slaves) that send HTTP requests to `slave1:4000` / `slave2:4000`
-- → **171 deployments** total
+- **155 direct deployments** using the master's currently rendered API keys
+- **138 slave deployments** (69 model aliases × 2 slaves) that send HTTP requests to `slave1:4000` / `slave2:4000`
+- → **293 deployments** total with the currently rendered provider set
 
 **Each slave** (uses the base `config.yaml`):
 - Runs with **its own API keys** (different accounts than the master and the other slaves)
 - Proxies the request to the real providers (OpenRouter, Groq, etc.)
 
-**Routing**: The master routes via `usage-based-routing-v2` across ALL 171 deployments — deployments with remaining `tpm`/`rpm` budget are preferred; usage is tracked cross-instance (including shared cooldowns) via the shared Redis. Once the direct deployments are exhausted, the master routes to a slave — which has its own keys and its own rate limits.
+**Routing**: The master routes via `usage-based-routing-v2` across all 293 currently rendered deployments — deployments with remaining `tpm`/`rpm` budget are preferred; usage is tracked cross-instance (including shared cooldowns) via the shared Redis. Once the direct deployments are exhausted, the master routes to a slave — which has its own keys and its own rate limits. Embedding and audio aliases only fan out to the same alias on slaves and never enter the chat fallback chains.
 
 ## Effect
 
@@ -146,7 +146,7 @@ multi-instance/k8s/
 ├── namespace.yaml              # Namespace: litellm-free-models
 ├── kustomization.yaml          # Kustomize – all resources at once
 ├── master/
-│   ├── configmap.yaml          # Generated (171 deployments)
+│   ├── configmap.yaml          # Generated (currently 293 deployments)
 │   ├── deployment.yaml         # Master pod
 │   └── service.yaml            # ClusterIP: litellm-master
 ├── slave/
@@ -237,7 +237,7 @@ Slaves don't need to be restarted — they use the base `config.yaml` via a volu
 multi-instance/
 ├── .env.example              # Project .env: Redis/Postgres passwords (Compose interpolation)
 ├── master/
-│   ├── config.yaml           # Docker config (99 base + 72 slave = 171)
+│   ├── config.yaml           # Docker config (currently 155 base + 138 slave = 293)
 │   └── .env.example          # Master keys + SLAVE1/2_API_KEY
 ├── slave1/
 │   └── .env.example          # Slave-1 keys (different accounts)

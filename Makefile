@@ -6,12 +6,12 @@
         k8s-apply k8s-delete k8s-secret k8s-logs k8s-pods check-config \
         render-config render-config-no-redis test test-quiet clean \
         validate-manifests backup-db restore-db lint format lint-fix \
-        pre-commit-run install-dev
+        pre-commit-run install-dev pricing-doc
 
 # Pinned LiteLLM version (instead of the drifting main-latest tag).
 # Must match docker-compose.yaml, Dockerfile, and the K8s deployments;
 # update via Renovate/Dependabot or manually.
-LITELLM_IMAGE ?= ghcr.io/berriai/litellm:v1.92.0
+LITELLM_IMAGE ?= ghcr.io/berriai/litellm:v1.97.0
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | \
@@ -32,6 +32,9 @@ render-config-dry: ## Dry-run render (no writes)
 
 render-config-no-redis: ## Render config.yaml WITHOUT Redis (standalone runs without a Redis container)
 	@python3 render-config.py --no-redis
+
+pricing-doc: ## Regenerate MODEL_PRICING.md (official, DB, and estimated savings)
+	@python3 find-shared-models.py --write-pricing-doc --refresh-pricing
 
 k8s-configmap: render-config ## Regenerate k8s/configmap.yaml from rendered config.yaml
 	@python3 -c "\
@@ -82,7 +85,8 @@ k8s-namespace: ## Create namespace
 # through litellm-redis-secret (single source).
 K8S_SECRET_KEYS := LITELLM_MASTER_KEY OPENROUTER_API_KEY CEREBRAS_API_KEY \
 	GROQ_API_KEY CLOUDFLARE_API_KEY CLOUDFLARE_API_BASE NVIDIA_API_KEY \
-	GEMINI_API_KEY MISTRAL_API_KEY COHERE_API_KEY GITHUB_TOKEN \
+	GEMINI_API_KEY MISTRAL_API_KEY COHERE_API_KEY POOLSIDE_API_KEY ZAI_API_KEY \
+	ELEVENLABS_API_KEY \
 	OPENCODE_ZEN_API_KEY OVHCLOUD_API_KEY LLM7IO_API_KEY HF_TOKEN
 
 k8s-secret: env-check k8s-namespace ## Create K8s secrets from .env (litellm-secrets + litellm-redis-secret)

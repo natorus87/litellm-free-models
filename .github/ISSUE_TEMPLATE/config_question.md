@@ -30,7 +30,9 @@ Which API keys are set? (names are enough — **never post values!**)
 - [ ] `NVIDIA_API_KEY`
 - [ ] `MISTRAL_API_KEY`
 - [ ] `COHERE_API_KEY`
-- [ ] `GITHUB_TOKEN`
+- [ ] `POOLSIDE_API_KEY`
+- [ ] `ZAI_API_KEY`
+- [ ] `ELEVENLABS_API_KEY`
 - [ ] `OPENCODE_ZEN_API_KEY`
 - [ ] `LLM7IO_API_KEY`
 - [ ] `HF_TOKEN`

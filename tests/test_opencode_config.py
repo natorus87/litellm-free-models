@@ -67,7 +67,16 @@ class TestModelsFromTemplate(unittest.TestCase):
                 "      model: cerebras/gpt-oss-120b\n\n"
                 "  - model_name: kimi-k2.6\n"
                 "    litellm_params:\n"
-                "      model: openrouter/moonshotai/kimi-k2.6:free\n"
+                "      model: openrouter/moonshotai/kimi-k2.6:free\n\n"
+                "  - model_name: embedding-general\n"
+                "    litellm_params:\n"
+                "      model: gemini/gemini-embedding-001\n\n"
+                "  - model_name: audio-transcription\n"
+                "    litellm_params:\n"
+                "      model: groq/whisper-large-v3-turbo\n\n"
+                "  - model_name: whisper-large-v3\n"
+                "    litellm_params:\n"
+                "      model: groq/whisper-large-v3\n"
             )
             names = oc.models_from_template(p)
             self.assertEqual(names, ["gpt-oss-120b", "kimi-k2.6"])

@@ -143,7 +143,7 @@ the PR won't be merged.
 - API prefix in LiteLLM: `openrouter/`, `cerebras/`, `groq/`,
   `cloudflare/`, `gemini/`, `mistral/`, `cohere/`, `huggingface/`.
   For OpenAI-compatible providers (`openai/`), the prefix is replaced
-  by `api_base` (NVIDIA, GitHub Models, OpenCode Zen, LLM7.io,
+  by `api_base` (NVIDIA, Poolside, OpenCode Zen, LLM7.io,
   OVHcloud).
 
 ### Models

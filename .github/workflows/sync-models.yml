@@ -52,7 +52,9 @@ jobs:
           NVIDIA_API_KEY: ${{ secrets.SYNC_NVIDIA_API_KEY }}
           MISTRAL_API_KEY: ${{ secrets.SYNC_MISTRAL_API_KEY }}
           COHERE_API_KEY: ${{ secrets.SYNC_COHERE_API_KEY }}
-          MODELS_GITHUB_TOKEN: ${{ secrets.SYNC_GITHUB_MODELS_TOKEN }}
+          POOLSIDE_API_KEY: ${{ secrets.SYNC_POOLSIDE_API_KEY }}
+          ZAI_API_KEY: ${{ secrets.SYNC_ZAI_API_KEY }}
+          ELEVENLABS_API_KEY: ${{ secrets.SYNC_ELEVENLABS_API_KEY }}
           OPENCODE_ZEN_API_KEY: ${{ secrets.SYNC_OPENCODE_ZEN_API_KEY }}
           LLM7IO_API_KEY: ${{ secrets.SYNC_LLM7IO_API_KEY }}
           HF_TOKEN: ${{ secrets.SYNC_HF_TOKEN }}
@@ -71,7 +73,9 @@ jobs:
             [ -n "$NVIDIA_API_KEY" ]       && echo "NVIDIA_API_KEY=$NVIDIA_API_KEY"
             [ -n "$MISTRAL_API_KEY" ]      && echo "MISTRAL_API_KEY=$MISTRAL_API_KEY"
             [ -n "$COHERE_API_KEY" ]       && echo "COHERE_API_KEY=$COHERE_API_KEY"
-            [ -n "$MODELS_GITHUB_TOKEN" ]  && echo "GITHUB_TOKEN=$MODELS_GITHUB_TOKEN"
+            [ -n "$POOLSIDE_API_KEY" ]     && echo "POOLSIDE_API_KEY=$POOLSIDE_API_KEY"
+            [ -n "$ZAI_API_KEY" ]          && echo "ZAI_API_KEY=$ZAI_API_KEY"
+            [ -n "$ELEVENLABS_API_KEY" ]   && echo "ELEVENLABS_API_KEY=$ELEVENLABS_API_KEY"
             [ -n "$OPENCODE_ZEN_API_KEY" ] && echo "OPENCODE_ZEN_API_KEY=$OPENCODE_ZEN_API_KEY"
             [ -n "$LLM7IO_API_KEY" ]       && echo "LLM7IO_API_KEY=$LLM7IO_API_KEY"
             [ -n "$HF_TOKEN" ]             && echo "HF_TOKEN=$HF_TOKEN"

@@ -63,7 +63,7 @@ services:
       context: .
       dockerfile: Dockerfile
     # OR use the official image without a custom Dockerfile:
-    # image: ghcr.io/berriai/litellm:v1.92.0
+    # image: ghcr.io/berriai/litellm:v1.97.0
     container_name: litellm-free-models
     ports:
       - "4444:4000"  # LiteLLM proxy port
@@ -79,7 +79,9 @@ services:
       - GEMINI_API_KEY=${GEMINI_API_KEY}
       - MISTRAL_API_KEY=${MISTRAL_API_KEY}
       - COHERE_API_KEY=${COHERE_API_KEY}
-      - GITHUB_TOKEN=${GITHUB_TOKEN}
+      - POOLSIDE_API_KEY=${POOLSIDE_API_KEY}
+      - ZAI_API_KEY=${ZAI_API_KEY}
+      - ELEVENLABS_API_KEY=${ELEVENLABS_API_KEY}
       - OPENCODE_ZEN_API_KEY=${OPENCODE_ZEN_API_KEY}
       - LLM7IO_API_KEY=${LLM7IO_API_KEY}
       - HF_TOKEN=${HF_TOKEN}

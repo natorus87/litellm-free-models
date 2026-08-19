@@ -92,7 +92,25 @@ class TestProviderFromBlock(unittest.TestCase):
             "nvidia",
         )
 
-    def test_ovhcloud_github_disambiguation(self):
+    def test_poolside_with_vendor(self):
+        self.assertEqual(
+            rc._provider_from_block(
+                "openai/poolside/laguna-s-2.1",
+                "https://inference.poolside.ai/v1",
+            ),
+            "poolside",
+        )
+
+    def test_nvidia_hosting_poolside_model_uses_api_base(self):
+        self.assertEqual(
+            rc._provider_from_block(
+                "openai/poolside/laguna-xs-2.1",
+                "https://integrate.api.nvidia.com/v1",
+            ),
+            "nvidia",
+        )
+
+    def test_ovhcloud_opencode_disambiguation(self):
         # 'openai/Meta-Llama-...' without vendor_in_path: api_base decides
         self.assertEqual(
             rc._provider_from_block("openai/Meta-Llama-3.3-70B-Instruct",
@@ -100,15 +118,24 @@ class TestProviderFromBlock(unittest.TestCase):
             "ovhcloud",
         )
         self.assertEqual(
-            rc._provider_from_block("openai/Meta-Llama-3.3-70B-Instruct",
-                                    "https://models.inference.ai.azure.com"),
-            "github",
+            rc._provider_from_block("openai/big-pickle", "https://opencode.ai/zen/v1"),
+            "opencode-zen",
         )
 
     def test_huggingface(self):
         self.assertEqual(
             rc._provider_from_block("huggingface/meta-llama/Llama-3.1-8B-Instruct", ""),
             "huggingface",
+        )
+
+    def test_zai_and_elevenlabs(self):
+        self.assertEqual(
+            rc._provider_from_block("zai/glm-4.7-flash", ""),
+            "zai",
+        )
+        self.assertEqual(
+            rc._provider_from_block("elevenlabs/scribe_v2", ""),
+            "elevenlabs",
         )
 
     def test_empty(self):
@@ -167,9 +194,9 @@ class TestParseBlocks(unittest.TestCase):
 
           - model_name: foo
             litellm_params:
-              model: openai/Meta-Llama-3.3-70B-Instruct
-              api_key: github-token
-              api_base: https://models.inference.ai.azure.com
+              model: openai/big-pickle
+              api_key: zen-token
+              api_base: https://opencode.ai/zen/v1
 
           - model_name: foo
             litellm_params:
@@ -180,7 +207,7 @@ class TestParseBlocks(unittest.TestCase):
         lines = text.splitlines(keepends=True)
         _, _, blocks = rc.parse_blocks(lines)
         self.assertEqual(len(blocks), 2)
-        self.assertEqual(blocks[0]["provider"], "github")
+        self.assertEqual(blocks[0]["provider"], "opencode-zen")
         self.assertEqual(blocks[1]["provider"], "ovhcloud")
 
 
@@ -211,6 +238,21 @@ class TestUpdateFallbacks(unittest.TestCase):
         out = rc.update_fallbacks(lines, len(lines), openrouter_active=False)
         # chain is empty (only openrouter-free removed), line becomes empty
         self.assertEqual(out[1], "")
+
+    def test_embedding_empty_chain_preserved(self):
+        lines = [
+            'fallbacks:\n',
+            '  - {"embedding-general": []}\n',
+            '  - {"*": ["gpt-oss-20b"]}\n',
+        ]
+        out = rc.update_fallbacks(
+            lines,
+            len(lines),
+            openrouter_active=True,
+            no_fallback_model_names={"embedding-general"},
+        )
+        self.assertEqual(out[1], '  - {"embedding-general": []}\n')
+        self.assertNotIn("openrouter-free", out[1])
 
 
 class TestRemoveOrphanedFallbacks(unittest.TestCase):

@@ -87,10 +87,28 @@ PROVIDERS: dict[str, ProviderConfig] = {
             rpm=20, tpm=200000, needs_api_base=False, litellm_key="cohere",
         ),
         ProviderConfig(
-            name="github", prefix="openai", env_var="GITHUB_TOKEN",
+            name="poolside", prefix="openai", env_var="POOLSIDE_API_KEY",
             required=True, api_base_env=None,
-            api_base_static="https://models.inference.ai.azure.com",
-            rpm=15, tpm=100000, needs_api_base=True, litellm_key="github_models",
+            api_base_static="https://inference.poolside.ai/v1",
+            # Poolside does not publish preview rate limits; keep conservative
+            # local router budgets until response headers document otherwise.
+            rpm=10, tpm=200000, needs_api_base=True, litellm_key="poolside",
+            vendor_in_path=True,
+        ),
+        ProviderConfig(
+            name="zai", prefix="zai", env_var="ZAI_API_KEY",
+            required=True, api_base_env=None, api_base_static=None,
+            # Z.AI does not publish fixed free-model limits. Live testing
+            # showed intermittent provider-side 429s, so keep the initial
+            # routing budget deliberately conservative.
+            rpm=1, tpm=100000, needs_api_base=False, litellm_key="zai",
+        ),
+        ProviderConfig(
+            name="elevenlabs", prefix="elevenlabs", env_var="ELEVENLABS_API_KEY",
+            required=True, api_base_env=None, api_base_static=None,
+            # The free plan is quota-based and exposes no stable public RPM.
+            # This provider is currently used only for Scribe STT.
+            rpm=2, tpm=8000, needs_api_base=False, litellm_key="elevenlabs",
         ),
         ProviderConfig(
             name="opencode-zen", prefix="openai", env_var="OPENCODE_ZEN_API_KEY",
@@ -130,7 +148,7 @@ def find_by_litellm_prefix_and_vendor(prefix: str, vendor: str | None) -> Provid
     """
     Maps (prefix, vendor) -> ProviderConfig. None if not found.
     Example: ('openai', 'openai') -> nvidia (vendor_in_path)
-             ('openai', None)    -> None (ambiguous -- GitHub vs. OVHcloud)
+             ('openai', None)    -> None (ambiguous -- several API bases)
     """
     for p in PROVIDERS.values():
         if p.prefix != prefix:
@@ -142,4 +160,3 @@ def find_by_litellm_prefix_and_vendor(prefix: str, vendor: str | None) -> Provid
             if vendor is None and not p.vendor_in_path:
                 return p
     return None
-

@@ -1,10 +1,10 @@
 # PRICING.md — LiteLLM Free-Models Proxy Cost Information
 
-> **As of: 2026-06-14** — 13 providers (incl. OVHcloud anonymous free tier).
+> **As of: 2026-08-19** — 15 providers (incl. Z.AI Flash, ElevenLabs Scribe v2, Poolside's limited-time preview, and OVHcloud anonymous free tier; GitHub Models retired 2026-07-30).
 > Pricing data from `model_prices_and_context_window.json`
 > (LiteLLM reference DB, identical to `https://models.litellm.ai/`).
 
-This document provides average pricing information for the 13 free-tier LLM API providers used by the LiteLLM Free-Models Proxy. All prices are in USD per 1 million tokens (input + output) unless otherwise noted.
+This document provides pricing information for the 15 free-tier AI API providers used by the LiteLLM Free-Models Proxy. Token prices are in USD per 1 million tokens unless otherwise noted.
 
 Prices are based on public information as of June 2026 and are subject to change. Always check the provider's official website for the most current pricing.
 
@@ -22,7 +22,9 @@ Prices are based on public information as of June 2026 and are subject to change
 | **NVIDIA NIM**         | ✅ Yes               | $0.04 - $0.90              | $0.16 - $0.90               | Free for prototyping, production requires NVIDIA AI Enterprise ($4,500/GPU/year)         |
 | **Mistral La Plateforme** | ✅ Yes           | $0.15 - $2.00              | $0.15 - $6.00               | Free tier, Mistral Small: $0.20/$0.60, Mistral Large: $2.00/$6.00                       |
 | **Cohere**             | ✅ Yes               | $0.0375 - $2.50            | $0.15 - $10.00              | Free trial keys, Command R: $0.15/$0.60, Command R+: $2.50/$10.00                      |
-| **GitHub Models**      | ✅ Yes               | $0.13 - $2.50              | $0.50 - $10.00              | Free tier (rate-limited), paid: $0.00001 per token unit with model multipliers          |
+| **Poolside**           | ✅ Limited preview   | Not published              | Not published               | Laguna S 2.1 is free for a limited time; reference value is estimated separately        |
+| **Z.AI**               | ✅ Yes               | $0.00                      | $0.00                       | GLM-4.5/4.7 Flash and GLM-4.6V Flash are zero-priced; limits unpublished                 |
+| **ElevenLabs**         | ✅ Yes               | n/a                        | n/a                         | Renewable Free audio quota; Scribe v2 STT routed, noncommercial Free output              |
 | **OpenCode Zen**       | ✅ Yes               | $0.00 - $0.30              | $0.00 - $1.20               | Several free models, paid models: $0.05-0.30/$0.40-1.20 (cheaper tier)                  |
 | **LLM7.io**           | ✅ Yes               | $0.00                      | $0.00                       | All models are free, 2 RPM (40 RPM with free token from token.llm7.io)                    |
 | **HuggingFace Inference API** | ✅ Yes       | $0.00                      | $0.00                       | Free Inference API, rate-limited, 150K+ models, no credit card required                   |
@@ -34,6 +36,11 @@ Prices are based on public information as of June 2026 and are subject to change
 
 ### OpenRouter
 - **Free Tier**: 50 requests/day, 25+ free models
+- **Free embeddings**: NVIDIA Nemotron 3 Embed 1B and Llama Nemotron Embed
+  VL 1B V2 are $0 through `/v1/embeddings` (both live-tested at 2048d).
+- **Catalog audit 2026-08-19**: `dots-3-note-preview:free` and
+  `lfm-2.5-2.6b:free` were added. Six former `:free` routes returned HTTP 404
+  and were removed; their paid slugs were not adopted.
 - **Paid**: Pass-through pricing from providers + 5.5% fee on credits
 - **Example Models**:
   - Free models: Always free, rate-limited
@@ -95,13 +102,23 @@ Prices are based on public information as of June 2026 and are subject to change
   - Command R+: $2.50/M input, $10.00/M output
   - Command A: $2.50/M input, $10.00/M output
 
-### GitHub Models
-- **Free Tier**: Rate-limited access to all models
-- **Paid**: $0.00001 per token unit (with model multipliers)
-- **Example Models**:
-  - Phi-4: $0.13/M input, $0.50/M output
-  - Llama-3.3-70B-Instruct: $0.71/M input, $0.71/M output
-  - GPT-4o: $2.50/M input, $10.00/M output
+### Poolside
+- **Free Tier**: Laguna S 2.1 is free for a limited time during the preview.
+- **Paid reference price**: Not published by Poolside; the generated
+  `MODEL_PRICING.md` uses a clearly labelled estimate.
+- **API**: OpenAI-compatible at `https://inference.poolside.ai/v1`.
+
+### Z.AI
+- **Free models**: GLM-4.5-Flash, GLM-4.7-Flash, GLM-4.6V-Flash.
+- **Free price**: $0 input and output; public RPM/TPM limits are unpublished.
+- **Routing budget**: conservative 1 RPM / 100K TPM until stable headers are known.
+
+### ElevenLabs
+- **Free tier**: renewable audio quota; the live account exposed 10,000 TTS
+  characters and Scribe v2 STT successfully returned HTTP 200.
+- **Proxy route**: `scribe_v2` is a second `audio-transcription` deployment.
+- **Restriction**: Free output is noncommercial; API TTS with library/premade
+  voices returned HTTP 402, so ElevenLabs TTS is not routed yet.
 
 ### OpenCode Zen
 - **Free Models**:

@@ -23,6 +23,7 @@ Usage:
     python3 find-shared-models.py --output report.txt
     python3 find-shared-models.py --refresh-pricing
     python3 find-shared-models.py --no-pricing
+    python3 find-shared-models.py --write-pricing-doc
 """
 
 from __future__ import annotations
@@ -252,12 +253,26 @@ def _filter_free_openrouter(data: dict) -> list[str]:
     return out
 
 
+# Embedding/rerank catalogs are needed for stale-deployment reporting, but
+# must never enter the chat overlap/apply engine (which emits mode: chat).
+OPENROUTER_NON_CHAT_MODELS: set[str] = set()
+
+
 def fetch_openrouter(key: str) -> list[str]:
-    data = http_get_json(
+    headers = {"Authorization": f"Bearer {key}"}
+    chat_data = http_get_json(
         "https://openrouter.ai/api/v1/models",
-        {"Authorization": f"Bearer {key}"},
+        headers,
     )
-    return _filter_free_openrouter(data)
+    embedding_data = http_get_json(
+        "https://openrouter.ai/api/v1/embeddings/models",
+        headers,
+    )
+    chat_models = _filter_free_openrouter(chat_data)
+    embedding_models = _filter_free_openrouter(embedding_data)
+    OPENROUTER_NON_CHAT_MODELS.clear()
+    OPENROUTER_NON_CHAT_MODELS.update(embedding_models)
+    return sorted(set(chat_models + embedding_models))
 
 
 def fetch_cerebras(key: str) -> list[str]:
@@ -376,30 +391,27 @@ def fetch_cohere(key: str) -> list[str]:
     return _parse_cohere_models(data)
 
 
-def _parse_github_models(data) -> list[str]:
-    """GitHub Models returns either a bare LIST of model objects or a dict
-    with a models/data key, depending on the endpoint."""
-    if isinstance(data, dict):
-        items = data.get("models", data.get("data", []))
-    else:
-        items = data or []
-    out: list[str] = []
-    for m in items:
-        if isinstance(m, str):
-            out.append(m)
-        elif isinstance(m, dict):
-            name = m.get("name") or m.get("id") or ""
-            if name:
-                out.append(name)
-    return out
-
-
-def fetch_github_models(token: str) -> list[str]:
+def fetch_poolside(key: str) -> list[str]:
     data = http_get_json(
-        "https://models.inference.ai.azure.com/models",
-        {"Authorization": f"Bearer {token}"},
+        "https://inference.poolside.ai/v1/models",
+        {"Authorization": f"Bearer {key}"},
     )
-    return _parse_github_models(data)
+    return [m["id"] for m in data.get("data", []) if isinstance(m, dict) and m.get("id")]
+
+
+def fetch_zai(key: str) -> list[str]:
+    """Validate the Z.AI key and return the curated zero-price catalog.
+
+    Z.AI's /models response currently lists its metered models but omits the
+    three Flash IDs from the public $0 pricing table, even though they are
+    callable. A successful catalog request validates the key; the returned
+    IDs deliberately remain restricted to the verified free set.
+    """
+    http_get_json(
+        "https://api.z.ai/api/paas/v4/models",
+        {"Authorization": f"Bearer {key}"},
+    )
+    return ["glm-4.5-flash", "glm-4.7-flash", "glm-4.6v-flash"]
 
 
 def fetch_opencode_zen(key: str) -> list[str]:
@@ -490,7 +502,8 @@ PROVIDERS: dict[str, Callable[..., list[str]]] = {
     "nvidia":     lambda env: fetch_nvidia(env["NVIDIA_API_KEY"]),
     "mistral":    lambda env: fetch_mistral(env["MISTRAL_API_KEY"]),
     "cohere":     lambda env: fetch_cohere(env["COHERE_API_KEY"]),
-    "github":     lambda env: fetch_github_models(env["GITHUB_TOKEN"]),
+    "poolside":   lambda env: fetch_poolside(env["POOLSIDE_API_KEY"]),
+    "zai":        lambda env: fetch_zai(env["ZAI_API_KEY"]),
     "opencode-zen": lambda env: fetch_opencode_zen(env["OPENCODE_ZEN_API_KEY"]),
     "llm7io":     lambda env: fetch_llm7io(env.get("LLM7IO_API_KEY", "unused")),
     "huggingface": lambda env: fetch_huggingface(env.get("HF_TOKEN", "")),
@@ -507,7 +520,8 @@ _REQUIRED_ENV = {
     "nvidia": ["NVIDIA_API_KEY"],
     "mistral": ["MISTRAL_API_KEY"],
     "cohere": ["COHERE_API_KEY"],
-    "github": ["GITHUB_TOKEN"],
+    "poolside": ["POOLSIDE_API_KEY"],
+    "zai": ["ZAI_API_KEY"],
     "opencode-zen": ["OPENCODE_ZEN_API_KEY"],
     # llm7io/huggingface/ovhcloud: free tier without a required key
     "llm7io": [],
@@ -681,6 +695,203 @@ def fmt_cost(per_token: float | None) -> str:
     if per_token is None or per_token == 0:
         return "$0.000"
     return f"${per_token * 1e6:.3f}/M"
+
+
+# Official list prices used before the LiteLLM database and estimates.  These
+# are deliberately kept separate from model_info.*_cost_per_token: all routes
+# in this repository are free-tier routes, so feeding comparison prices into
+# LiteLLM would corrupt its spend accounting.
+OFFICIAL_REFERENCE_PRICES: dict[str, dict[str, object]] = {
+    "gpt-oss-120b": {"input": 0.15, "output": 0.60, "source": "Groq"},
+    "gpt-oss-20b": {"input": 0.075, "output": 0.30, "source": "Groq"},
+    "gpt-oss-safeguard-20b": {"input": 0.075, "output": 0.30, "source": "Groq"},
+    "qwen3.6-27b": {"input": 0.60, "output": 3.00, "source": "Groq"},
+    "command-r-plus": {"input": 2.50, "output": 10.00, "source": "Cohere"},
+    "embedding-general": {"input": 0.15, "output": 0.0, "source": "Google"},
+    "embedding-code": {"input": 0.15, "output": 0.0, "source": "Mistral"},
+    "whisper-large-v3": {"price": 0.111, "unit": "audio hour", "source": "Groq"},
+    "whisper-large-v3-turbo": {"price": 0.04, "unit": "audio hour", "source": "Groq"},
+    "audio-transcription": {"price": 0.04, "unit": "audio hour", "source": "Groq"},
+    "audio-speech": {"price": 22.00, "unit": "1M characters", "source": "Groq"},
+    "lyria-3-clip": {"price": 0.04, "unit": "30s song", "source": "Google"},
+    "lyria-3-pro": {"price": 0.08, "unit": "song", "source": "Google"},
+}
+
+REFERENCE_SOURCE_URLS = {
+    "LiteLLM": "https://github.com/BerriAI/litellm/blob/main/model_prices_and_context_window.json",
+    "Groq": "https://console.groq.com/docs/models",
+    "Google": "https://ai.google.dev/gemini-api/docs/pricing",
+    "Mistral": "https://docs.mistral.ai/models/model-cards/codestral-embed-25-05",
+    "Cohere": "https://cohere.com/pricing",
+}
+
+
+def estimate_token_reference(model_name: str, mode: str = "chat") -> tuple[float, float, str]:
+    """Conservative public-API equivalent when no positive list price exists.
+
+    Values are USD per 1M tokens.  MoE names use their active parameter count
+    (``a3b``/``a17b``); other names use the largest visible parameter count.
+    The bands intentionally sit near the inexpensive end of hosted open-model
+    inference so the displayed saving is not exaggerated.
+    """
+    if mode == "embedding":
+        return 0.10, 0.0, "estimate: embedding market benchmark"
+
+    published_active_sizes = {
+        "laguna-s-2.1": 8.0,
+        "laguna-xs-2.1": 3.0,
+    }
+    active = re.findall(r"a(\d+(?:\.\d+)?)b", model_name, re.IGNORECASE)
+    sizes = re.findall(r"(?<![a-z])(\d+(?:\.\d+)?)b", model_name, re.IGNORECASE)
+    size = published_active_sizes.get(model_name)
+    if size is None:
+        size = float(active[-1]) if active else (max(map(float, sizes)) if sizes else None)
+    if size is None:
+        return 0.30, 1.20, "estimate: unknown-size open-model benchmark"
+    if size <= 4:
+        price = (0.05, 0.20)
+    elif size <= 10:
+        price = (0.08, 0.30)
+    elif size <= 30:
+        price = (0.20, 0.80)
+    elif size <= 80:
+        price = (0.50, 1.50)
+    elif size <= 200:
+        price = (0.80, 2.50)
+    else:
+        price = (1.50, 4.50)
+    return price[0], price[1], f"estimate: {size:g}B hosted open-model band"
+
+
+def _positive_db_reference(
+    pricing: dict[str, dict], deployments: list[dict]
+) -> tuple[float, float, str] | None:
+    """Returns the cheapest positive paid equivalent in the LiteLLM DB."""
+    candidates: list[tuple[float, float, float, str]] = []
+    for deployment in deployments:
+        native = _native_model_id(deployment["model_id"])
+        entry, db_key = lookup_price(
+            pricing, deployment["provider"], native, with_fallback=True
+        )
+        if entry is None or db_key is None:
+            continue
+        ic = entry.get("input_cost_per_token")
+        oc = entry.get("output_cost_per_token")
+        if not (isinstance(ic, (int, float)) and isinstance(oc, (int, float))):
+            continue
+        if ic <= 0 and oc <= 0:
+            continue
+        input_m = float(ic) * 1e6
+        output_m = float(oc) * 1e6
+        candidates.append(((input_m + output_m) / 2, input_m, output_m, db_key))
+    if not candidates:
+        return None
+    _, input_m, output_m, db_key = min(candidates)
+    return input_m, output_m, db_key
+
+
+def build_pricing_reference(template_path: Path, pricing: dict[str, dict]) -> str:
+    """Builds a complete Markdown savings sheet for every configured alias."""
+    rc = _load_render_config_module()
+    lines = template_path.read_text(encoding="utf-8").splitlines(keepends=True)
+    _, _, blocks = rc.parse_blocks(lines)
+    by_model: dict[str, list[dict]] = defaultdict(list)
+    for block in blocks:
+        by_model[block["model_name"]].append(block)
+
+    token_rows: list[tuple[str, str, float, float, float, str]] = []
+    unit_rows: list[tuple[str, str, float, str, str]] = []
+    counts = defaultdict(int)
+    for model_name, deployments in by_model.items():
+        mode = deployments[0].get("mode") or "chat"
+        official = OFFICIAL_REFERENCE_PRICES.get(model_name)
+        if official and "price" in official:
+            source = str(official["source"])
+            unit_rows.append((
+                model_name, mode, float(official["price"]), str(official["unit"]),
+                f"official: {source}",
+            ))
+            counts["official"] += 1
+            continue
+        if official:
+            ic = float(official["input"])
+            oc = float(official["output"])
+            basis = f"official: {official['source']}"
+            counts["official"] += 1
+        else:
+            db_price = _positive_db_reference(pricing, deployments)
+            if db_price:
+                ic, oc, db_key = db_price
+                basis = f"LiteLLM DB: `{db_key}`"
+                counts["database"] += 1
+            else:
+                ic, oc, basis = estimate_token_reference(model_name, mode)
+                counts["estimated"] += 1
+        mix = (ic + oc) / 2
+        token_rows.append((model_name, mode, ic, oc, mix, basis))
+
+    # The native Cloudflare image route lives in general_settings rather than
+    # model_list because LiteLLM has no compatible adapter for this endpoint.
+    if "/cloudflare/images/generations" in "".join(lines):
+        unit_rows.append((
+            "cloudflare-image", "image_generation", 0.01, "image",
+            "estimate: low-cost image API benchmark",
+        ))
+        counts["estimated"] += 1
+
+    token_rows.sort(key=lambda row: (-row[4], row[0]))
+    unit_rows.sort()
+    md = [
+        "# Reference prices and estimated savings",
+        "",
+        f"> Snapshot: {datetime.now(timezone.utc).date().isoformat()} · "
+        f"{len(by_model)} configured aliases plus the native image route · "
+        "operational proxy price: **$0** within provider free-tier limits.",
+        "",
+        "These are comparison prices, not billing values. Official public list prices have priority, then the "
+        "cheapest positive equivalent in LiteLLM's pricing database. Missing values use a conservative, "
+        "clearly labelled size-band estimate. They are intentionally **not** written to `model_info`, so "
+        "LiteLLM spend tracking continues to reflect the real free-tier cost.",
+        "",
+        f"Coverage: **{counts['official']} official**, **{counts['database']} LiteLLM DB**, "
+        f"**{counts['estimated']} estimated**.",
+        "",
+        "## Token-priced models",
+        "",
+        "Savings assume 1M total tokens split 50% input / 50% output. Multiply the `Saving / 1M mix` "
+        "column by your monthly millions of mixed tokens.",
+        "",
+        "| Alias | Mode | Input / 1M | Output / 1M | Saving / 1M mix | Basis |",
+        "|---|---:|---:|---:|---:|---|",
+    ]
+    for name, mode, ic, oc, mix, basis in token_rows:
+        md.append(f"| `{name}` | {mode} | ${ic:.3f} | ${oc:.3f} | **${mix:.3f}** | {basis} |")
+
+    md.extend([
+        "",
+        "## Audio and request-priced models",
+        "",
+        "| Alias | Mode | Reference price | Saving at free-tier price | Basis |",
+        "|---|---:|---:|---:|---|",
+    ])
+    for name, mode, price, unit, basis in unit_rows:
+        md.append(f"| `{name}` | {mode} | ${price:g} / {unit} | **${price:g} / {unit}** | {basis} |")
+
+    md.extend([
+        "",
+        "## Estimation method",
+        "",
+        "For chat models without a published/database price, the active MoE size (`A3B`, `A17B`, …) "
+        "or otherwise the visible parameter size selects a conservative hosted-open-model band. "
+        "Unknown sizes use $0.30 input / $1.20 output per 1M tokens; embeddings use $0.10 / 1M input tokens. "
+        "Estimates are directional and should not be used for accounting.",
+        "",
+        "## Sources",
+        "",
+    ])
+    for label, url in REFERENCE_SOURCE_URLS.items():
+        md.append(f"- [{label}]({url})")
+    return "\n".join(md) + "\n"
 
 
 # ---------------------------------------------------------------------------
@@ -1344,6 +1555,8 @@ def build_groups(raw: dict[str, list[str]]) -> dict[str, dict[str, list[str]]]:
         for m in models:
             if not m:
                 continue
+            if provider == "openrouter" and m in OPENROUTER_NON_CHAT_MODELS:
+                continue
             groups[normalize(m)][provider].append(m)
     return {k: dict(v) for k, v in groups.items() if len(v) >= 2}
 
@@ -1424,6 +1637,11 @@ def find_stale_deployments(
 
     stale: list[dict] = []
     for b in blocks:
+        # Provider catalog fetchers intentionally normalize/filter for chat
+        # overlap discovery. Non-chat deployments have their own live smoke
+        # tests and must not be reported as stale against those chat catalogs.
+        if b.get("mode") != "chat":
+            continue
         provider = b["provider"]
         if provider not in catalogs:
             continue
@@ -1718,7 +1936,7 @@ PROVIDER_DISPLAY = {
     "nvidia": "NVIDIA",
     "mistral": "Mistral",
     "cohere": "Cohere",
-    "github": "GitHub Models",
+    "poolside": "Poolside",
     "opencode-zen": "OpenCode Zen",
     "llm7io": "LLM7.io",
     "huggingface": "HuggingFace",
@@ -1853,6 +2071,9 @@ def main() -> int:
     ap.add_argument("--write-docs", action="store_true",
                     help="Write the deployment matrix between the marker "
                          "comments in AGENTS.md and README.md and exit")
+    ap.add_argument("--write-pricing-doc", action="store_true",
+                    help="Write MODEL_PRICING.md with an official/DB/estimated "
+                         "reference price for every configured alias and exit")
     args = ap.parse_args()
 
     # Matrix modes need neither .env nor provider queries
@@ -1868,6 +2089,25 @@ def main() -> int:
             )
         else:
             print(matrix)
+        return 0
+
+    if args.write_pricing_doc:
+        src = args.template if args.template.exists() else args.config
+        if not src.exists():
+            print(f"ERROR: {src} not found.", file=sys.stderr)
+            return 2
+        PRICING_URL = args.pricing_url
+        PRICING_CACHE = args.pricing_cache
+        if args.refresh_pricing:
+            _reset_pricing_index()
+        try:
+            pricing = load_pricing(force_refresh=args.refresh_pricing)
+        except Exception as exc:
+            print(f"ERROR: pricing data unavailable: {exc}", file=sys.stderr)
+            return 2
+        output = REPO_ROOT / "MODEL_PRICING.md"
+        output.write_text(build_pricing_reference(src, pricing), encoding="utf-8")
+        print(f"Pricing reference written to {output}")
         return 0
 
     env = load_env(args.env)

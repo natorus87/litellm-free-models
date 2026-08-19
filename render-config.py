@@ -49,7 +49,15 @@ BACKUP_KEEP = 5
 
 # model_names that deliberately have only one provider (documented
 # exceptions to the >= 2-provider rule) -- NO warning is emitted for these.
-SINGLE_PROVIDER_ALLOWED = {"big-pickle", "north-mini-code", "openrouter-free"}
+SINGLE_PROVIDER_ALLOWED = {
+    "big-pickle", "north-mini-code", "openrouter-free",
+    # Their second free deployment retired or left the free catalog.
+    "command-r-plus", "mistral-large", "qwen3-next-80b-a3b",
+    # Z.AI is currently the only zero-price API host for these exact models.
+    "glm-4.5-flash", "glm-4.7-flash", "glm-4.6v-flash",
+    # Current OpenRouter-only free models (live-tested 2026-08-19).
+    "dots-3-note-preview", "lfm-2.5-2.6b",
+}
 
 
 def load_env(path: Path) -> dict[str, str]:
@@ -72,8 +80,6 @@ def _provider_from_block(model_id: str, api_base: str) -> str:
     Discrimination is necessary because several providers use the
     'openai' prefix:
       - NVIDIA:        'openai/<vendor>/<model>' with the NVIDIA API base
-      - GitHub Models: 'openai/<ModelName>' (e.g. 'openai/Meta-Llama-...')
-                       with the Azure API base
       - OVHcloud:      'openai/<ModelName>' with the OVHcloud API base
       - OpenCode Zen:  'openai/<model>' with the opencode.ai base
       - LLM7.io:       'openai/<model>' with the llm7.io base
@@ -85,7 +91,6 @@ def _provider_from_block(model_id: str, api_base: str) -> str:
       openrouter/openai/gpt-oss-120b:free         -> openrouter
       cerebras/gpt-oss-120b                       -> cerebras
       openai/openai/gpt-oss-120b                  -> nvidia
-      openai/Meta-Llama-3.3-70B + github base     -> github
       openai/Meta-Llama-3.3-70B + ovhcloud base    -> ovhcloud
       openai/big-pickle + opencode base           -> opencode-zen
     """
@@ -99,14 +104,9 @@ def _provider_from_block(model_id: str, api_base: str) -> str:
                 return name
         return ""
 
-    # OpenAI-compatible. First try via vendor:
-    vendor = parts[1] if len(parts) >= 2 else ""
-    if vendor == "openai":
-        return "nvidia"
-    if vendor and vendor in PROVIDERS:
-        return vendor
-
-    # No unambiguous vendor. Discriminate via api_base.
+    # OpenAI-compatible: a matching api_base is authoritative. This must run
+    # before vendor inference because one provider can host another vendor's
+    # model (e.g. NVIDIA serves openai/poolside/laguna-xs-2.1).
     # We match any OpenAI provider whose api_base_static appears in the
     # block (substring, since api_base may or may not have a trailing slash).
     if api_base and not api_base.startswith("{{"):
@@ -120,6 +120,13 @@ def _provider_from_block(model_id: str, api_base: str) -> str:
         if candidates:
             candidates.sort(reverse=True)
             return candidates[0][1]
+
+    # No usable api_base: try the vendor path.
+    vendor = parts[1] if len(parts) >= 2 else ""
+    if vendor == "openai":
+        return "nvidia"
+    if vendor and vendor in PROVIDERS:
+        return vendor
 
     # Last resort: first OpenAI provider without vendor_in_path
     for name, prov in PROVIDERS.items():
@@ -173,6 +180,7 @@ def parse_blocks(lines: list[str]) -> tuple[int, int, list[dict]]:
                 "provider": "",
                 "model_id": "",
                 "api_base": "",
+                "mode": "chat",
             }
         elif current is not None:
             # Block ends before a line with < 2-space indent (top-level key)
@@ -190,6 +198,8 @@ def parse_blocks(lines: list[str]) -> tuple[int, int, list[dict]]:
                 current["model_id"] = mid
             elif stripped.startswith("api_base:") and " " in stripped and not current["api_base"]:
                 current["api_base"] = stripped.split("api_base:", 1)[1].strip()
+            elif stripped.startswith("mode:") and " " in stripped:
+                current["mode"] = stripped.split("mode:", 1)[1].strip()
     if current is not None:
         current["end"] = len(lines) - 1
         _finalize(current)
@@ -250,11 +260,16 @@ def single_deployment_warnings(kept_blocks: list[dict]) -> list[str]:
     fallback chain is left to carry the load.
     """
     counts: dict[str, int] = {}
+    non_chat_names = {
+        b["model_name"] for b in kept_blocks if b.get("mode", "chat") != "chat"
+    }
     for b in kept_blocks:
         counts[b["model_name"]] = counts.get(b["model_name"], 0) + 1
     return sorted(
         mn for mn, c in counts.items()
-        if c == 1 and mn not in SINGLE_PROVIDER_ALLOWED
+        if c == 1
+        and mn not in SINGLE_PROVIDER_ALLOWED
+        and mn not in non_chat_names
     )
 
 
@@ -284,21 +299,41 @@ def strip_redis_blocks(lines: list[str], redis_active: bool) -> list[str]:
     return new_lines
 
 
+def strip_cloudflare_image_blocks(lines: list[str], active: bool) -> list[str]:
+    """Keep the native Cloudflare image pass-through only with valid config."""
+    new_lines: list[str] = []
+    in_block = False
+    for line in lines:
+        stripped = line.strip()
+        if stripped.startswith("# BEGIN CLOUDFLARE IMAGE"):
+            in_block = True
+            continue
+        if stripped.startswith("# END CLOUDFLARE IMAGE"):
+            in_block = False
+            continue
+        if not in_block or active:
+            new_lines.append(line)
+    return new_lines
+
+
 def update_fallbacks(
     lines: list[str],
     ml_end: int,
     openrouter_active: bool,
     valid_model_names: set[str] | None = None,
+    no_fallback_model_names: set[str] | None = None,
 ) -> list[str]:
     """
-    - If OPENROUTER_API_KEY is set: append 'openrouter-free' to every
-      fallback chain and to the catch-all '*' (idempotent).
+    - If OPENROUTER_API_KEY is set: append 'openrouter-free' to chat
+      fallback chains and to the catch-all '*' (idempotent).
     - If OPENROUTER_API_KEY is missing: remove 'openrouter-free' from all
       fallback chains, so LiteLLM doesn't try to make an OpenRouter call
       without a key.
     - Chain TARGETS that are no longer an existing model_name get removed
       (in both fallbacks AND context_window_fallbacks) -- otherwise a
       fallback would point at a model with zero deployments.
+    - Explicit no-fallback chains (embeddings) stay empty so the generic
+      chat catch-all cannot receive incompatible requests.
     """
     new_lines = list(lines)
 
@@ -325,6 +360,13 @@ def update_fallbacks(
             continue
         chain_str = m.group(2)
         items = [x.strip().strip('"') for x in chain_str.split(",") if x.strip().strip('"')]
+
+        # An explicit empty chain shields non-interchangeable model types
+        # (currently embeddings) from the generic "*" chat fallback. Keep it
+        # empty even when OpenRouter is active.
+        if in_fallbacks and no_fallback_model_names and m.group(1) in no_fallback_model_names:
+            new_lines[i] = re.sub(r"\[.*?\]", "[]", line)
+            continue
 
         if valid_model_names is not None:
             items = [x for x in items if x in valid_model_names]
@@ -403,6 +445,17 @@ def render(
         return 2
 
     env = load_env(env_path)
+    cloudflare_image_active = bool(
+        env.get("CLOUDFLARE_API_KEY") and env.get("CLOUDFLARE_API_BASE")
+    )
+    if cloudflare_image_active:
+        cloudflare_base = env["CLOUDFLARE_API_BASE"].rstrip("/")
+        if cloudflare_base.endswith("/v1"):
+            cloudflare_base = cloudflare_base[:-3]
+        env["CLOUDFLARE_IMAGE_API_URL"] = (
+            cloudflare_base
+            + "/run/@cf/bytedance/stable-diffusion-xl-lightning"
+        )
     text = template_path.read_text(encoding="utf-8")
 
     # 1) Substitute placeholders
@@ -412,6 +465,7 @@ def render(
         pass
 
     lines = text.splitlines(keepends=True)
+    lines = strip_cloudflare_image_blocks(lines, cloudflare_image_active)
 
     # 1b) Conditionally strip the Redis blocks (cache + router tracking)
     redis_active = bool(env.get("REDIS_HOST")) and not no_redis
@@ -427,6 +481,9 @@ def render(
     kept, removed = filter_blocks(blocks, env)
 
     valid_names = {b["model_name"] for b in kept}
+    no_fallback_names = {
+        b["model_name"] for b in kept if b.get("mode", "chat") != "chat"
+    }
 
     if removed:
         print(f"Removed provider deployments (no API key): {len(removed)}")
@@ -478,7 +535,11 @@ def render(
     new_lines = remove_orphaned_fallbacks(new_lines, valid_names)
     openrouter_active = bool(env.get("OPENROUTER_API_KEY"))
     new_lines = update_fallbacks(
-        new_lines, new_ml_end, openrouter_active, valid_model_names=valid_names
+        new_lines,
+        new_ml_end,
+        openrouter_active,
+        valid_model_names=valid_names,
+        no_fallback_model_names=no_fallback_names,
     )
 
     # 6) Print the valid model_names list
@@ -495,7 +556,7 @@ def render(
         print("  -> Add the missing API key(s) to .env to restore "
               "redundancy (see .env.example).")
     if openrouter_active:
-        print("OPENROUTER_API_KEY set -> 'openrouter-free' is appended to all fallback chains.")
+        print("OPENROUTER_API_KEY set -> 'openrouter-free' is appended to chat fallback chains.")
     else:
         print("OPENROUTER_API_KEY missing -> 'openrouter-free' is NOT added as a fallback.")
 

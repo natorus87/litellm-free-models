@@ -74,20 +74,45 @@ class TestFallbackTargetsExist(unittest.TestCase):
 
 
 class TestTwoProviderRule(unittest.TestCase):
-    """Every model_name (except documented exceptions) has >= 2 deployments."""
+    """Every chat model_name (except documented exceptions) has >= 2 deployments.
+
+    Non-chat aliases may intentionally stay provider-specific. For example,
+    embedding vectors are not interchangeable and media endpoints have no chat
+    fallback.
+    """
 
     def test_min_two_deployments(self):
         _, blocks = _parse_template()
         counts = {}
+        modes = {}
         for b in blocks:
             counts[b["model_name"]] = counts.get(b["model_name"], 0) + 1
+            modes.setdefault(b["model_name"], set()).add(b.get("mode", "chat"))
         for mn, n in sorted(counts.items()):
-            if mn in SINGLE_PROVIDER_ALLOWED:
+            if mn in SINGLE_PROVIDER_ALLOWED or modes[mn] != {"chat"}:
                 continue
             self.assertGreaterEqual(
                 n, 2,
                 f"'{mn}' has only {n} deployment(s); rule: >= 2 providers "
                 f"(exceptions: {sorted(SINGLE_PROVIDER_ALLOWED)})")
+
+
+class TestNonChatFallbackIsolation(unittest.TestCase):
+    """Non-chat aliases must explicitly opt out of the generic chat fallback."""
+
+    def test_non_chat_aliases_have_empty_fallback_chains(self):
+        lines, blocks = _parse_template()
+        non_chat_names = {
+            b["model_name"] for b in blocks if b.get("mode", "chat") != "chat"
+        }
+        self.assertTrue(non_chat_names, "no non-chat deployments found")
+        chains = _extract_chains(lines, "fallbacks")
+        for model_name in non_chat_names:
+            self.assertIn(model_name, chains)
+            self.assertEqual(
+                chains[model_name], [],
+                f"non-chat alias '{model_name}' must not cross-fallback",
+            )
 
 
 class TestTpmRpmInLitellmParams(unittest.TestCase):
@@ -118,11 +143,16 @@ class TestSingleDeploymentWarnings(unittest.TestCase):
         kept = [
             {"model_name": "gpt-oss-120b"},
             {"model_name": "gpt-oss-120b"},
-            {"model_name": "mistral-large"},          # only 1 -> warning
+            {"model_name": "llama-3.3-70b-instruct"}, # only 1 -> warning
             {"model_name": "big-pickle"},             # exception -> no warning
             {"model_name": "openrouter-free"},        # exception -> no warning
+            {"model_name": "embedding-general", "mode": "embedding"},
+            {"model_name": "audio-speech", "mode": "audio_speech"},
+            {"model_name": "glm-4.7-flash", "mode": "chat"},
         ]
-        self.assertEqual(rc.single_deployment_warnings(kept), ["mistral-large"])
+        self.assertEqual(
+            rc.single_deployment_warnings(kept), ["llama-3.3-70b-instruct"]
+        )
 
     def test_no_warnings_when_all_redundant(self):
         kept = [
@@ -144,6 +174,13 @@ class TestRedisMarkers(unittest.TestCase):
                          "BEGIN/END REDIS markers unbalanced")
         self.assertGreaterEqual(len(begins), 2,
                                 "expected: cache block + router block marked")
+
+    def test_cloudflare_image_markers_balanced(self):
+        text = TEMPLATE.read_text(encoding="utf-8")
+        self.assertEqual(
+            text.count("# BEGIN CLOUDFLARE IMAGE"),
+            text.count("# END CLOUDFLARE IMAGE"),
+        )
 
 
 class TestRenderWithoutRedis(unittest.TestCase):
@@ -182,6 +219,31 @@ class TestRenderWithoutRedis(unittest.TestCase):
             self.assertIn("cache: true", rendered)
             self.assertNotIn("# BEGIN REDIS", rendered)
             self.assertNotIn("# END REDIS", rendered)
+
+    def test_cloudflare_image_passthrough_is_conditional(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as d:
+            env = Path(d) / ".env"
+            env.write_text("LITELLM_MASTER_KEY=sk-test\n")
+            out = Path(d) / "config.yaml"
+            rc.render(TEMPLATE, env, out, dry_run=False, no_redis=True)
+            rendered = out.read_text(encoding="utf-8")
+            self.assertNotIn("/cloudflare/images/generations", rendered)
+
+            env.write_text(
+                "LITELLM_MASTER_KEY=sk-test\n"
+                "CLOUDFLARE_API_KEY=cf-test\n"
+                "CLOUDFLARE_API_BASE=https://api.cloudflare.test/accounts/a/ai/v1\n"
+            )
+            rc.render(TEMPLATE, env, out, dry_run=False, no_redis=True)
+            rendered = out.read_text(encoding="utf-8")
+            self.assertIn("/cloudflare/images/generations", rendered)
+            self.assertIn(
+                "https://api.cloudflare.test/accounts/a/ai/run/"
+                "@cf/bytedance/stable-diffusion-xl-lightning",
+                rendered,
+            )
+            self.assertNotIn("# BEGIN CLOUDFLARE IMAGE", rendered)
 
 
 class TestRenderedFallbackTargets(unittest.TestCase):

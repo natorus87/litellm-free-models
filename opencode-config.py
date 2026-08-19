@@ -52,6 +52,7 @@ DEFAULT_TIMEOUT_MS = 900_000       # 15 min -- full requests can take a
                                     # while with free-tier fallback chains
 DEFAULT_CHUNK_TIMEOUT_MS = 120_000  # 2 min between SSE chunks
 BACKUP_KEEP = 5
+NON_CHAT_MODEL_PREFIXES = ("embedding-", "audio-", "whisper-")
 
 
 def load_env(path: Path) -> dict[str, str]:
@@ -77,7 +78,11 @@ def fetch_live_models(base_url: str, api_key: str, timeout: int = 10) -> list[st
         req = urllib.request.Request(url, headers=headers, method="GET")
         with urllib.request.urlopen(req, timeout=timeout) as resp:
             data = json.loads(resp.read().decode("utf-8", errors="replace"))
-        return sorted({m["id"] for m in data.get("data", []) if m.get("id")})
+        return sorted({
+            m["id"]
+            for m in data.get("data", [])
+            if m.get("id") and not m["id"].startswith(NON_CHAT_MODEL_PREFIXES)
+        })
     except (urllib.error.URLError, OSError, TimeoutError, ValueError, KeyError) as exc:
         print(f"  [WARN] Live query to {url} failed ({exc}) "
               "-- falling back to config.template.yaml.", file=sys.stderr)
@@ -88,7 +93,11 @@ def models_from_template(template_path: Path) -> list[str]:
     """Parses model_names directly from config.template.yaml (unfiltered --
     may include models whose provider key is missing from .env)."""
     text = template_path.read_text(encoding="utf-8")
-    names = sorted(set(re.findall(r"^\s*-\s*model_name:\s*(\S+)\s*$", text, re.MULTILINE)))
+    names = sorted({
+        name
+        for name in re.findall(r"^\s*-\s*model_name:\s*(\S+)\s*$", text, re.MULTILINE)
+        if not name.startswith(NON_CHAT_MODEL_PREFIXES)
+    })
     return names
 
 

@@ -16,7 +16,8 @@ class TestProviderConfigShape(unittest.TestCase):
                 self.assertTrue(p.litellm_key)
                 self.assertIn(p.prefix, {"openrouter", "cerebras", "groq",
                                           "cloudflare", "gemini", "openai",
-                                          "mistral", "cohere", "huggingface"})
+                                          "mistral", "cohere", "huggingface",
+                                          "zai", "elevenlabs"})
                 # Either env_var or anonymous (required=False)
                 if p.required:
                     self.assertIsNotNone(p.env_var,
@@ -63,14 +64,31 @@ class TestProviderLookup(unittest.TestCase):
         self.assertTrue(nvidia.vendor_in_path)
         self.assertEqual(nvidia.name, "nvidia")
 
-    def test_github_and_ovhcloud_share_openai_prefix(self):
+    def test_poolside_openai_compatible_base(self):
+        poolside = PROVIDERS["poolside"]
+        self.assertEqual(poolside.prefix, "openai")
+        self.assertEqual(poolside.env_var, "POOLSIDE_API_KEY")
+        self.assertEqual(poolside.api_base_static, "https://inference.poolside.ai/v1")
+        self.assertTrue(poolside.vendor_in_path)
+
+    def test_zai_and_elevenlabs_native_providers(self):
+        zai = PROVIDERS["zai"]
+        elevenlabs = PROVIDERS["elevenlabs"]
+        self.assertEqual(zai.prefix, "zai")
+        self.assertEqual(zai.env_var, "ZAI_API_KEY")
+        self.assertFalse(zai.needs_api_base)
+        self.assertEqual(elevenlabs.prefix, "elevenlabs")
+        self.assertEqual(elevenlabs.env_var, "ELEVENLABS_API_KEY")
+        self.assertFalse(elevenlabs.needs_api_base)
+
+    def test_opencode_and_ovhcloud_share_openai_prefix(self):
         # Both use 'openai/<ModelName>' -- discriminated via api_base
-        github = PROVIDERS["github"]
+        opencode = PROVIDERS["opencode-zen"]
         ovh = PROVIDERS["ovhcloud"]
-        self.assertEqual(github.prefix, "openai")
+        self.assertEqual(opencode.prefix, "openai")
         self.assertEqual(ovh.prefix, "openai")
-        self.assertNotEqual(github.api_base_static, ovh.api_base_static)
-        self.assertFalse(github.vendor_in_path)
+        self.assertNotEqual(opencode.api_base_static, ovh.api_base_static)
+        self.assertFalse(opencode.vendor_in_path)
         self.assertFalse(ovh.vendor_in_path)
 
 
