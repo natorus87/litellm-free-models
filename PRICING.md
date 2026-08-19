@@ -27,7 +27,7 @@ Prices are based on public information as of June 2026 and are subject to change
 | **Z.AI**               | ✅ Yes               | $0.00                      | $0.00                       | GLM-4.5/4.7 Flash and GLM-4.6V Flash are zero-priced; limits unpublished                 |
 | **ElevenLabs**         | ✅ Yes               | n/a                        | n/a                         | Renewable Free audio quota; Scribe v2 STT routed, noncommercial Free output              |
 | **OpenCode Zen**       | ✅ Yes               | $0.00 - $0.30              | $0.00 - $1.20               | Several free models, paid models: $0.05-0.30/$0.40-1.20 (cheaper tier)                  |
-| **LLM7.io**           | ✅ Yes               | $0.00                      | $0.00                       | All models are free, 2 RPM (40 RPM with free token from token.llm7.io)                    |
+| **LLM7.io**           | ✅ Limited           | Allowance                  | Allowance                   | Six current `turbo` models are covered by anonymous/free-token allowance; `pro` and usage-based-only models are paid |
 | **HuggingFace Inference API** | ✅ Yes       | $0.00                      | $0.00                       | Free Inference API, rate-limited, 150K+ models, no credit card required                   |
 | **OVHcloud AI Endpoints** | ✅ Yes (anonymous) | $0.00                      | $0.00                       | **Anonymous free tier**, no API key required, 2 RPM/IP/model. GPT-OSS-120B paid: $0.08/$0.40 per 1M |
 
@@ -135,10 +135,11 @@ Prices are based on public information as of June 2026 and are subject to change
   - GPT 5.4 Mini: $0.75/M input, $4.50/M output
 
 ### LLM7.io
-- **Free Tier**: 2 RPM (40 RPM with free token), 30+ models, no credit card
-- **No paid tier mentioned**
+- **Anonymous**: 10 RPM, 60 requests/hour, 500K tokens/day
+- **Free token**: 40 RPM, 100 requests/hour, 1M tokens/day; obtain it at https://dash.llm7.io
+- **Paid routes**: `pro` or `usage_based_only: true`; excluded from this proxy
 - **API**: OpenAI-compatible at https://api.llm7.io/v1
-- **Models**: deepseek-r1-0528, qwen3-235b, mistral-small-3.2, codestral-latest
+- **Current free models**: DeepSeek V4 Flash 0731, Codestral Latest, Gemini 3.1 Flash Lite, GPT-OSS 20B, MiniMax M2.7, Mistral Nemo
 
 ### HuggingFace Inference API
 - **Free Tier**: rate-limited, no credit card, 150K+ models available

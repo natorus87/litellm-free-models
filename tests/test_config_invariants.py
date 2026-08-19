@@ -195,6 +195,26 @@ class TestFailFastRouting(unittest.TestCase):
             self.assertIn(setting, router)
 
 
+class TestLLM7TemplateFreeOnly(unittest.TestCase):
+    """Never commit an LLM7 Pro/balance-billed deployment."""
+
+    def test_llm7_deployments_match_audited_free_catalog(self):
+        _, blocks = _parse_template()
+        configured = {
+            block["model_id"].removeprefix("openai/")
+            for block in blocks
+            if block.get("provider") == "llm7io"
+        }
+        self.assertEqual(configured, {
+            "DeepSeek-V4-Flash-0731",
+            "codestral-latest",
+            "gemini-3.1-flash-lite",
+            "gpt-oss:20b",
+            "minimax-m2.7",
+            "mistral-Nemo-Instruct-2407",
+        })
+
+
 class TestSingleDeploymentWarnings(unittest.TestCase):
     """After the provider filter, the renderer should warn if a
     model_name has only 1 deployment left (exceptions excluded)."""

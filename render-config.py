@@ -53,12 +53,16 @@ SINGLE_PROVIDER_ALLOWED = {
     "big-pickle", "north-mini-code", "openrouter-free",
     # Their second free deployment retired or left the free catalog.
     "command-r-plus", "mistral-large", "qwen3-next-80b-a3b",
+    # These aliases lost their former LLM7 route when it became paid/stale.
+    "deepseek-r1-0528", "deepseek-v3", "qwen3-235b",
     # Z.AI is currently the only zero-price API host for these exact models.
     "glm-4.5-flash", "glm-4.7-flash", "glm-4.6v-flash",
     # Current OpenRouter-only free models (live-tested 2026-08-19).
     "dots-3-note-preview", "lfm-2.5-2.6b",
     # Hetzner Experiments currently provides these exact IDs exclusively.
     "qwen3.6-35b-a3b", "qwen3.8-27b",
+    # Current LLM7 free-token catalog exclusives.
+    "gemini-3.1-flash-lite", "minimax-m2.7",
 }
 
 

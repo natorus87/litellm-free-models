@@ -51,7 +51,7 @@ Client ──► MASTER (:4000, own keys + slave routing)
               └─► Slave 2 (:4002, other API keys)
 ```
 
-Master (with every provider key configured): 157 direct + 142 slave deployments = **299 deployments**. Slaves reuse the base `config.yaml` via a Docker volume mount.
+Master (with every provider key configured): 149 direct + 146 slave deployments = **295 deployments**. Slaves reuse the base `config.yaml` via a Docker volume mount.
 
 **Positioning (deliberate decision):** Multi-key deployments in ONE instance have the same 3× effect without the overhead. The master/slave setup is positioned only for **separate hosts/egress IPs** (IP-based limits like OVHcloud) — see the README section "Multi-Instance".
 
@@ -96,7 +96,7 @@ Full env-var list including `REDIS_*`/`POSTGRES_*`: see `.env.example` (that fil
 - **OpenCode Zen**: endpoint `https://opencode.ai/zen/v1`, models: `deepseek-v4-flash-free`, `nemotron-3-ultra-free`, `big-pickle`, `north-mini-code-free`.
 - **Cloudflare**: model suffix `-fp8-fast` instead of `-fp8` (verified against the API docs). `deepseek-v4-flash` doesn't exist on Cloudflare.
 - **Cerebras**: `llama3.1-8b` was deprecated on 2026-05-27.
-- **LLM7.io**: OpenAI-compatible at `https://api.llm7.io/v1`. Free tier: 2 RPM (40 RPM with a free token from token.llm7.io). `api_key: "unused"` for the base tier.
+- **LLM7.io**: OpenAI-compatible at `https://api.llm7.io/v1`. Anonymous tier: 10 RPM / 500K tokens per day; a free token from `dash.llm7.io` raises this to 40 RPM / 1M tokens per day. Only live catalog records with `tier: turbo` and `usage_based_only: false` are free; `pro` or usage-based-only routes are rejected by discovery. `api_key: "unused"` remains valid for anonymous access.
 - **HuggingFace**: uses LiteLLM's `huggingface/` prefix → routes to the HF Inference API. Rate-limited, no credit card needed.
 - **OVHcloud**: OpenAI-compatible at `https://oai.endpoints.kepler.ai.cloud.ovh.net/v1`. **Anonymous free tier** without an API key (2 RPM/IP/model). `api_key: ""` in `config.yaml`.
 - **Google AI Studio**: currently **no active deployment** (Google retired the gemma-3 series, June 2026). `GEMINI_API_KEY` stays documented for future catalog syncs.
@@ -108,21 +108,18 @@ Full env-var list including `REDIS_*`/`POSTGRES_*`: see `.env.example` (that fil
 The matrix is **generated** (`python3 find-shared-models.py --write-docs`), not hand-maintained — CI checks for drift:
 
 <!-- BEGIN GENERATED MODEL MATRIX (python3 find-shared-models.py --write-docs) -->
-Snapshot (generated from `config.template.yaml`): **71 model_names, 157 base deployments**. `render-config.py` removes deployments from providers without an API key in `.env` — the effective count can therefore be lower.
+Snapshot (generated from `config.template.yaml`): **73 model_names, 149 base deployments**. `render-config.py` removes deployments from providers without an API key in `.env` — the effective count can therefore be lower.
 
 | model_name | Deployments | Provider |
 |---|---|---|
 | `gpt-oss-20b` | 7 | OpenRouter, Groq, Cloudflare, NVIDIA, OVHcloud, HuggingFace, LLM7.io |
 | `gpt-oss-120b` | 6 | Cerebras, Groq, Cloudflare, NVIDIA, OVHcloud, HuggingFace |
-| `kimi-k2.6` | 6 | Cloudflare, NVIDIA, OpenCode Zen, LLM7.io, HuggingFace |
-| `deepseek-v4-flash` | 5 | NVIDIA, OpenCode Zen, HuggingFace, LLM7.io |
 | `gemma-4-31b-it` | 5 | OpenRouter, NVIDIA, HuggingFace, Cerebras, Google AI Studio |
-| `deepseek-v4-flash-0731` | 4 | LLM7.io, HuggingFace, NVIDIA |
+| `kimi-k2.6` | 5 | Cloudflare, NVIDIA, OpenCode Zen, HuggingFace |
+| `deepseek-v4-flash` | 4 | NVIDIA, OpenCode Zen, HuggingFace |
 | `gemma-4-26b-a4b-it` | 4 | OpenRouter, Cloudflare, HuggingFace, Google AI Studio |
 | `llama-3.3-70b-instruct` | 4 | Cloudflare, OVHcloud, HuggingFace, NVIDIA |
-| `mimo-v2.5` | 4 | LLM7.io, HuggingFace |
-| `kimi-k2.7-code` | 3 | OpenCode Zen, HuggingFace, LLM7.io |
-| `kimi-k3` | 3 | OpenCode Zen, LLM7.io, HuggingFace |
+| `deepseek-v4-flash-0731` | 3 | LLM7.io, HuggingFace, NVIDIA |
 | `laguna-s-2.1` | 3 | OpenRouter, OpenCode Zen, Poolside |
 | `llama-3.1-8b` | 3 | Cloudflare, NVIDIA, HuggingFace |
 | `nemotron-3-120b` | 3 | OpenRouter, Cloudflare, NVIDIA |
@@ -131,8 +128,6 @@ Snapshot (generated from `config.template.yaml`): **71 model_names, 157 base dep
 | `qwen3.6-27b` | 3 | Groq, HuggingFace, OVHcloud |
 | `audio-transcription` | 2 | Groq, ElevenLabs |
 | `codestral-latest` | 2 | LLM7.io, Mistral |
-| `deepseek-r1-0528` | 2 | LLM7.io, HuggingFace |
-| `deepseek-v3` | 2 | LLM7.io, HuggingFace |
 | `deepseek-v4-pro` | 2 | OpenCode Zen, HuggingFace |
 | `gemma-3-12b-it` | 2 | NVIDIA, HuggingFace |
 | `gemma-3-4b-it` | 2 | NVIDIA, HuggingFace |
@@ -140,12 +135,15 @@ Snapshot (generated from `config.template.yaml`): **71 model_names, 157 base dep
 | `gpt-oss-safeguard-20b` | 2 | Groq, HuggingFace |
 | `inkling` | 2 | NVIDIA, HuggingFace |
 | `kimi-k2.5` | 2 | OpenCode Zen, HuggingFace |
+| `kimi-k2.7-code` | 2 | OpenCode Zen, HuggingFace |
+| `kimi-k3` | 2 | OpenCode Zen, HuggingFace |
 | `laguna-xs-2.1` | 2 | OpenRouter, NVIDIA |
 | `llama-4-maverick` | 2 | NVIDIA, HuggingFace |
 | `llama-4-scout` | 2 | Cloudflare, HuggingFace |
 | `llama-guard-4-12b` | 2 | NVIDIA, HuggingFace |
 | `lyria-3-clip` | 2 | OpenRouter, Google AI Studio |
 | `lyria-3-pro` | 2 | OpenRouter, Google AI Studio |
+| `mimo-v2.5` | 2 | HuggingFace |
 | `minimax-m3` | 2 | NVIDIA, HuggingFace |
 | `mistral-nemo-instruct-2407` | 2 | LLM7.io, OVHcloud |
 | `nemotron-3-nano-omni-30b-a3b-reasoning` | 2 | OpenRouter, NVIDIA |
@@ -155,7 +153,6 @@ Snapshot (generated from `config.template.yaml`): **71 model_names, 157 base dep
 | `nemotron-nano-9b-v2` | 2 | OpenRouter, NVIDIA |
 | `north-mini-code` | 2 | OpenCode Zen, OpenRouter |
 | `qwen2.5-vl-72b-instruct` | 2 | HuggingFace, OVHcloud |
-| `qwen3-235b` | 2 | LLM7.io, HuggingFace |
 | `qwen3-32b` | 2 | HuggingFace, OVHcloud |
 | `qwen3-coder-30b-a3b` | 2 | HuggingFace, OVHcloud |
 | `qwen3.5-397b-a17b` | 2 | HuggingFace, OVHcloud |
@@ -166,6 +163,8 @@ Snapshot (generated from `config.template.yaml`): **71 model_names, 157 base dep
 | `audio-speech` | 1 | Groq |
 | `big-pickle` | 1 | OpenCode Zen |
 | `command-r-plus` | 1 | Cohere |
+| `deepseek-r1-0528` | 1 | HuggingFace |
+| `deepseek-v3` | 1 | HuggingFace |
 | `dots-3-note-preview` | 1 | OpenRouter |
 | `elevenlabs-scribe-v2` | 1 | ElevenLabs |
 | `embedding-code` | 1 | Mistral |
@@ -174,12 +173,15 @@ Snapshot (generated from `config.template.yaml`): **71 model_names, 157 base dep
 | `embedding-multilingual` | 1 | Cohere |
 | `embedding-nvidia-text` | 1 | OpenRouter |
 | `embedding-nvidia-vl` | 1 | OpenRouter |
+| `gemini-3.1-flash-lite` | 1 | LLM7.io |
 | `glm-4.5-flash` | 1 | Z.AI |
 | `glm-4.6v-flash` | 1 | Z.AI |
 | `glm-4.7-flash` | 1 | Z.AI |
 | `lfm-2.5-2.6b` | 1 | OpenRouter |
+| `minimax-m2.7` | 1 | LLM7.io |
 | `mistral-large` | 1 | Mistral |
 | `openrouter-free` | 1 | OpenRouter |
+| `qwen3-235b` | 1 | HuggingFace |
 | `qwen3-next-80b-a3b` | 1 | HuggingFace |
 | `qwen3.6-35b-a3b` | 1 | Hetzner |
 | `qwen3.8-27b` | 1 | Hetzner |
@@ -191,7 +193,7 @@ Snapshot (generated from `config.template.yaml`): **71 model_names, 157 base dep
 
 ### Multi-Instance (additional)
 
-Master config (with every provider key configured): 157 base + 142 slave = **299 deployments**. Each slave reuses the rendered base config with its own keys → effectively 3× rate limit per provider.
+Master config (with every provider key configured): 149 base + 146 slave = **295 deployments**. Each slave reuses the rendered base config with its own keys → effectively 3× rate limit per provider.
 
 ---
 
@@ -258,7 +260,7 @@ The authoritative source is `config.template.yaml` (`router_settings.fallbacks` 
 │       ├── service.yaml
 │       └── secret.yaml.template
 │
-├── tests/                       # 129 unit tests (unittest, stdlib-only)
+├── tests/                       # 131 unit tests (unittest, stdlib-only)
 │   └── test_config_invariants.py  # fallback isolation, chat ≥2-provider rule, tpm/rpm location, Redis markers
 │
 ├── .github/workflows/
@@ -299,7 +301,7 @@ docker compose up -d
 ## 7. Status & Known Limitations
 
 ### Completed (as of 2026-08-19)
-- ✅ 16 providers integrated, 71 model_names / 157 template deployments
+- ✅ 16 providers integrated, 73 model_names / 149 template deployments
 - ✅ Redis cache + auth cache, **conditionally rendered** (without REDIS_HOST → Redis-free)
 - ✅ `usage-based-routing-v2` with Redis tracking; tpm/rpm in litellm_params
 - ✅ Password flow: no more committed defaults; Compose enforces passwords (`:?`),
@@ -393,7 +395,7 @@ kubectl apply -k k8s/           # K8s variant (uses ../../k8s/redis as a base)
 `find-shared-models.py`:
 
 1. **Live query** of 15 model catalogs via `.env` keys (`providers-overlap.txt`) — **in parallel** (ThreadPool, <2s instead of sequential) with **retry/backoff** on 429/5xx/network errors. OVHcloud/LLM7/HF also work without a key. ElevenLabs audio entitlement is validated separately because `/v1/models` does not list Scribe STT.
-2. **Free-tier filter**: OpenRouter combines its chat and embedding catalogs and only returns `:free`/zero-priced models (embedding/rerank IDs are excluded from chat auto-apply); Google AI only keeps `generateContent`-capable models; Cohere only chat-capable model names; HuggingFace comes live from the Inference Router (`router.huggingface.co/v1/models`) instead of a hardcoded list (fallback list → provider gets marked "partial" and excluded from the stale check). Cloudflare is queried via `/ai/models/search` (paginated).
+2. **Free-tier filter**: OpenRouter combines its chat and embedding catalogs and only returns `:free`/zero-priced models (embedding/rerank IDs are excluded from chat auto-apply); LLM7 only keeps `tier: turbo` records with `usage_based_only: false`; Google AI only keeps `generateContent`-capable models; Cohere only chat-capable model names; HuggingFace comes live from the Inference Router (`router.huggingface.co/v1/models`) instead of a hardcoded list (fallback list → provider gets marked "partial" and excluded from the stale check). Cloudflare is queried via `/ai/models/search` (paginated).
 3. **Grouping** by normalized model names, filtered to ≥ 2 providers.
 4. **Cost comparison** (hypothetical paid-tier price) from the LiteLLM reference DB, 24h cache under `.cache/litellm-prices.json`.
 5. **Apply-plan mapping**: normalized group names are mapped onto the template's descriptive `model_names` (plus global dedup) — existing deployments are reliably recognized as `skip` instead of being planned as a duplicate. Provider detection in the template uses the api_base discrimination from `render-config.py` (NVIDIA/GitHub/Zen/LLM7/OVH share the `openai/` prefix).

@@ -409,6 +409,23 @@ class TestCohereModelParsing(unittest.TestCase):
         self.assertEqual(fsm._parse_cohere_models(data), ["command-r"])
 
 
+class TestLLM7FreeFilter(unittest.TestCase):
+    """LLM7's catalog mixes free-token and balance-billed routes."""
+
+    def test_fetch_keeps_only_non_usage_based_turbo_models(self):
+        import unittest.mock as mock
+
+        catalog = {"data": [
+            {"id": "gpt-oss:20b", "tier": "turbo", "usage_based_only": False},
+            {"id": "gemma4:31b", "tier": "turbo", "usage_based_only": True},
+            {"id": "kimi-k2.6", "tier": "pro", "usage_based_only": True},
+            {"id": "missing-flags"},
+        ]}
+        with mock.patch.object(fsm, "http_get_json", return_value=catalog):
+            models = fsm.fetch_llm7io("free-token")
+        self.assertEqual(models, ["gpt-oss:20b"])
+
+
 class TestGoogleModelParsing(unittest.TestCase):
     def test_filters_non_chat_models(self):
         data = {"models": [

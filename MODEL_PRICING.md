@@ -1,10 +1,10 @@
 # Reference prices and estimated savings
 
-> Snapshot: 2026-08-19 · 71 configured aliases plus the native image route · operational proxy price: **$0** within provider free-tier limits.
+> Snapshot: 2026-08-19 · 73 configured aliases plus the native image route · operational proxy price: **$0** within provider free-tier limits.
 
 These are comparison prices, not billing values. Official public list prices have priority, then the cheapest positive equivalent in LiteLLM's pricing database. Missing values use a conservative, clearly labelled size-band estimate. They are intentionally **not** written to `model_info`, so LiteLLM spend tracking continues to reflect the real free-tier cost.
 
-Coverage: **13 official**, **29 LiteLLM DB**, **30 estimated**.
+Coverage: **13 official**, **31 LiteLLM DB**, **30 estimated**.
 
 ## Token-priced models
 
@@ -18,9 +18,11 @@ Savings assume 1M total tokens split 50% input / 50% output. Multiply the `Savin
 | `codestral-latest` | chat | $1.000 | $3.000 | **$2.000** | LiteLLM DB: `mistral/codestral-latest` |
 | `qwen3.6-27b` | chat | $0.600 | $3.000 | **$1.800** | official: Groq |
 | `kimi-k2.5` | chat | $0.500 | $2.800 | **$1.650** | LiteLLM DB: `together_ai/moonshotai/Kimi-K2.5` |
+| `minimax-m2.7` | chat | $0.600 | $2.400 | **$1.500** | LiteLLM DB: `sambanova/MiniMax-M2.7` |
 | `kimi-k2.6` | chat | $0.500 | $2.000 | **$1.250** | LiteLLM DB: `deepinfra/moonshotai/Kimi-K2-Instruct` |
 | `mistral-large` | chat | $0.500 | $1.500 | **$1.000** | LiteLLM DB: `mistral/mistral-large-latest` |
 | `nemotron-3-120b` | chat | $0.500 | $1.500 | **$1.000** | LiteLLM DB: `cloudflare/@cf/nvidia/nemotron-3-120b-a12b` |
+| `gemini-3.1-flash-lite` | chat | $0.250 | $1.500 | **$0.875** | LiteLLM DB: `gemini/gemini-3.1-flash-lite` |
 | `qwen3-next-80b-a3b` | chat | $0.140 | $1.400 | **$0.770** | LiteLLM DB: `deepinfra/Qwen/Qwen3-Next-80B-A3B-Instruct` |
 | `big-pickle` | chat | $0.300 | $1.200 | **$0.750** | estimate: unknown-size open-model benchmark |
 | `dots-3-note-preview` | chat | $0.300 | $1.200 | **$0.750** | estimate: unknown-size open-model benchmark |

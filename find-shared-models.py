@@ -438,7 +438,18 @@ def fetch_llm7io(key: str) -> list[str]:
     if key and key != "unused":
         headers["Authorization"] = f"Bearer {key}"
     data = http_get_json("https://api.llm7.io/v1/models", headers)
-    return [m["id"] for m in data.get("data", [])]
+    # The live catalog mixes free and paid models. `turbo` identifies models
+    # available to anonymous/free-token users, while usage_based_only=true
+    # still requires a Pro allowance or topped-up balance even if the tier is
+    # labelled turbo. Never let those paid routes enter this free-only proxy.
+    return [
+        m["id"]
+        for m in data.get("data", [])
+        if isinstance(m, dict)
+        and m.get("id")
+        and m.get("tier") == "turbo"
+        and m.get("usage_based_only") is False
+    ]
 
 
 def fetch_ovhcloud(*_args) -> list[str]:

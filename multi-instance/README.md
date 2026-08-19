@@ -29,9 +29,9 @@ Extends the [main setup](../README.md) to **3 independent LiteLLM instances** th
 ```
 
 **Master** (multi-instance/master/config.yaml):
-- Up to **157 direct deployments** when every provider key is configured
-- Up to **142 slave deployments** (71 model aliases × 2 slaves) that send HTTP requests to `slave1:4000` / `slave2:4000`
-- → Up to **299 deployments** total
+- Up to **149 direct deployments** when every provider key is configured
+- Up to **146 slave deployments** (73 model aliases × 2 slaves) that send HTTP requests to `slave1:4000` / `slave2:4000`
+- → Up to **295 deployments** total
 
 **Each slave** (uses the base `config.yaml`):
 - Runs with **its own API keys** (different accounts than the master and the other slaves)
@@ -146,7 +146,7 @@ multi-instance/k8s/
 ├── namespace.yaml              # Namespace: litellm-free-models
 ├── kustomization.yaml          # Kustomize – all resources at once
 ├── master/
-│   ├── configmap.yaml          # Generated (up to 299 deployments)
+│   ├── configmap.yaml          # Generated (up to 295 deployments)
 │   ├── deployment.yaml         # Master pod
 │   └── service.yaml            # ClusterIP: litellm-master
 ├── slave/
@@ -237,7 +237,7 @@ Slaves don't need to be restarted — they use the base `config.yaml` via a volu
 multi-instance/
 ├── .env.example              # Project .env: Redis/Postgres passwords (Compose interpolation)
 ├── master/
-│   ├── config.yaml           # Docker config (up to 157 base + 142 slave = 299)
+│   ├── config.yaml           # Docker config (up to 149 base + 146 slave = 295)
 │   └── .env.example          # Master keys + SLAVE1/2_API_KEY
 ├── slave1/
 │   └── .env.example          # Slave-1 keys (different accounts)

@@ -7,6 +7,8 @@ Semantic Versioning.
 
 ### Added
 
+- Added the current free LLM7 `gemini-3.1-flash-lite` and `minimax-m2.7`
+  routes after live authenticated tests.
 - Hetzner Experiments Inference as the sixteenth free provider, with
   `qwen3.6-35b-a3b` and multimodal `qwen3.8-27b`, OpenAI-compatible catalog
   discovery, onboarding/env/Kubernetes/multi-instance wiring, conservative
@@ -14,6 +16,9 @@ Semantic Versioning.
 
 ### Fixed
 
+- Restricted LLM7 discovery and routing to live `turbo` models with
+  `usage_based_only: false`; removed ten stale or paid LLM7 deployments and
+  updated anonymous/free-token limits and dashboard URLs.
 - Made OpenRouter `embedding-liquid` fail fast (`timeout: 5`, no retry) so a
   free-tier `Retry-After: 60` response cannot hide a one-minute stall behind
   the successful retry's sub-second provider duration.
