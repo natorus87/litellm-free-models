@@ -71,6 +71,16 @@ class TestProviderLookup(unittest.TestCase):
         self.assertEqual(poolside.api_base_static, "https://inference.poolside.ai/v1")
         self.assertTrue(poolside.vendor_in_path)
 
+    def test_hetzner_openai_compatible_base(self):
+        hetzner = PROVIDERS["hetzner"]
+        self.assertEqual(hetzner.prefix, "openai")
+        self.assertEqual(hetzner.env_var, "HETZNER_VLLM_API_KEY")
+        self.assertEqual(
+            hetzner.api_base_static,
+            "https://inference.hetzner.com/api/v1",
+        )
+        self.assertFalse(hetzner.vendor_in_path)
+
     def test_zai_and_elevenlabs_native_providers(self):
         zai = PROVIDERS["zai"]
         elevenlabs = PROVIDERS["elevenlabs"]

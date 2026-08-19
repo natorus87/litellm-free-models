@@ -1168,6 +1168,38 @@ model_list:
 
 
   # ===========================================================================
+  # Hetzner Experiments – free, best-effort OpenAI-compatible inference
+  # ===========================================================================
+  - model_name: qwen3.6-35b-a3b
+    litellm_params:
+      model: openai/Qwen/Qwen3.6-35B-A3B-FP8
+      api_key: os.environ/HETZNER_VLLM_API_KEY
+      api_base: https://inference.hetzner.com/api/v1
+      tpm: 200000
+      rpm: 5
+      timeout: 30
+      num_retries: 1
+    model_info:
+      input_cost_per_token: 0
+      output_cost_per_token: 0
+      mode: chat
+
+  - model_name: qwen3.8-27b
+    litellm_params:
+      model: openai/Qwen/Qwen3.8-27B
+      api_key: os.environ/HETZNER_VLLM_API_KEY
+      api_base: https://inference.hetzner.com/api/v1
+      tpm: 200000
+      rpm: 5
+      timeout: 30
+      num_retries: 1
+    model_info:
+      input_cost_per_token: 0
+      output_cost_per_token: 0
+      mode: chat
+
+
+  # ===========================================================================
   # qwen3-coder-30b-a3b  –  2 FREE PROVIDERS
   # ===========================================================================
   - model_name: qwen3-coder-30b-a3b
@@ -2175,6 +2207,8 @@ router_settings:
     - {"qwen3.5-397b-a17b": ["gpt-oss-120b", "llama-3.3-70b-instruct", "mistral-large", "gpt-oss-20b"]}
     - {"qwen3.5-9b": ["gpt-oss-120b", "llama-3.3-70b-instruct", "mistral-large", "gpt-oss-20b"]}
     - {"qwen3.6-27b": ["gpt-oss-120b", "llama-3.3-70b-instruct", "mistral-large", "gpt-oss-20b"]}
+    - {"qwen3.6-35b-a3b": ["qwen3.6-27b", "gpt-oss-20b", "openrouter-free"]}
+    - {"qwen3.8-27b": ["qwen3.6-27b", "gpt-oss-20b", "openrouter-free"]}
     - {"qwen3-coder-30b-a3b": ["gpt-oss-120b", "llama-3.3-70b-instruct", "mistral-large", "gpt-oss-20b"]}
     - {"qwen3-next-80b-a3b": ["gpt-oss-120b", "llama-3.3-70b-instruct", "mistral-large", "gpt-oss-20b"]}
     - {"deepseek-v4-pro": ["gpt-oss-120b", "llama-3.3-70b-instruct", "mistral-large", "gpt-oss-20b"]}

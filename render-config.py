@@ -57,6 +57,8 @@ SINGLE_PROVIDER_ALLOWED = {
     "glm-4.5-flash", "glm-4.7-flash", "glm-4.6v-flash",
     # Current OpenRouter-only free models (live-tested 2026-08-19).
     "dots-3-note-preview", "lfm-2.5-2.6b",
+    # Hetzner Experiments currently provides these exact IDs exclusively.
+    "qwen3.6-35b-a3b", "qwen3.8-27b",
 }
 
 

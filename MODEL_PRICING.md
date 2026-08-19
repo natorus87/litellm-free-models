@@ -1,10 +1,10 @@
 # Reference prices and estimated savings
 
-> Snapshot: 2026-08-19 · 69 configured aliases plus the native image route · operational proxy price: **$0** within provider free-tier limits.
+> Snapshot: 2026-08-19 · 71 configured aliases plus the native image route · operational proxy price: **$0** within provider free-tier limits.
 
 These are comparison prices, not billing values. Official public list prices have priority, then the cheapest positive equivalent in LiteLLM's pricing database. Missing values use a conservative, clearly labelled size-band estimate. They are intentionally **not** written to `model_info`, so LiteLLM spend tracking continues to reflect the real free-tier cost.
 
-Coverage: **13 official**, **29 LiteLLM DB**, **28 estimated**.
+Coverage: **13 official**, **29 LiteLLM DB**, **30 estimated**.
 
 ## Token-priced models
 
@@ -41,6 +41,7 @@ Savings assume 1M total tokens split 50% input / 50% output. Multiply the `Savin
 | `deepseek-v4-pro` | chat | $0.435 | $0.870 | **$0.652** | LiteLLM DB: `deepseek/deepseek-v4-pro` |
 | `nemotron-3-nano-30b` | chat | $0.200 | $0.800 | **$0.500** | estimate: 30B hosted open-model band |
 | `nemotron-nano-12b-v2-vl` | chat | $0.200 | $0.800 | **$0.500** | estimate: 12B hosted open-model band |
+| `qwen3.8-27b` | chat | $0.200 | $0.800 | **$0.500** | estimate: 27B hosted open-model band |
 | `llama-4-maverick` | chat | $0.200 | $0.600 | **$0.400** | LiteLLM DB: `groq/meta-llama/llama-4-maverick-17b-128e-instruct` |
 | `gpt-oss-120b` | chat | $0.150 | $0.600 | **$0.375** | official: Groq |
 | `qwen3-235b` | chat | $0.180 | $0.540 | **$0.360** | LiteLLM DB: `deepinfra/Qwen/Qwen3-235B-A22B` |
@@ -63,6 +64,7 @@ Savings assume 1M total tokens split 50% input / 50% output. Multiply the `Savin
 | `laguna-xs-2.1` | chat | $0.050 | $0.200 | **$0.125** | estimate: 3B hosted open-model band |
 | `lfm-2.5-2.6b` | chat | $0.050 | $0.200 | **$0.125** | estimate: 2.6B hosted open-model band |
 | `nemotron-3-nano-omni-30b-a3b-reasoning` | chat | $0.050 | $0.200 | **$0.125** | estimate: 3B hosted open-model band |
+| `qwen3.6-35b-a3b` | chat | $0.050 | $0.200 | **$0.125** | estimate: 3B hosted open-model band |
 | `nemotron-3.5-lightning-free` | chat | $0.050 | $0.200 | **$0.125** | LiteLLM DB: `openrouter/nvidia/nemotron-3.5-lightning` |
 | `nemotron-nano-9b-v2` | chat | $0.040 | $0.160 | **$0.100** | LiteLLM DB: `deepinfra/nvidia/NVIDIA-Nemotron-Nano-9B-v2` |
 | `embedding-code` | embedding | $0.150 | $0.000 | **$0.075** | official: Mistral |

@@ -96,6 +96,14 @@ PROVIDERS: dict[str, ProviderConfig] = {
             vendor_in_path=True,
         ),
         ProviderConfig(
+            name="hetzner", prefix="openai", env_var="HETZNER_VLLM_API_KEY",
+            required=True, api_base_env=None,
+            api_base_static="https://inference.hetzner.com/api/v1",
+            # Experiments is free/best-effort and has no published fixed RPM.
+            # Start conservatively until live response headers show otherwise.
+            rpm=5, tpm=200000, needs_api_base=True, litellm_key="hetzner",
+        ),
+        ProviderConfig(
             name="zai", prefix="zai", env_var="ZAI_API_KEY",
             required=True, api_base_env=None, api_base_static=None,
             # Z.AI does not publish fixed free-model limits. Live testing

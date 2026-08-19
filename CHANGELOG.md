@@ -5,6 +5,13 @@ Semantic Versioning.
 
 ## [Unreleased]
 
+### Added
+
+- Hetzner Experiments Inference as the sixteenth free provider, with
+  `qwen3.6-35b-a3b` and multimodal `qwen3.8-27b`, OpenAI-compatible catalog
+  discovery, onboarding/env/Kubernetes/multi-instance wiring, conservative
+  unpublished-limit budgets, fallbacks, and estimated savings documentation.
+
 ### Fixed
 
 - Prevented slow `gpt-oss-120b` providers from consuming the former 120-second

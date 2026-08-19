@@ -399,6 +399,14 @@ def fetch_poolside(key: str) -> list[str]:
     return [m["id"] for m in data.get("data", []) if isinstance(m, dict) and m.get("id")]
 
 
+def fetch_hetzner(key: str) -> list[str]:
+    data = http_get_json(
+        "https://inference.hetzner.com/api/v1/models",
+        {"Authorization": f"Bearer {key}"},
+    )
+    return [m["id"] for m in data.get("data", []) if isinstance(m, dict) and m.get("id")]
+
+
 def fetch_zai(key: str) -> list[str]:
     """Validate the Z.AI key and return the curated zero-price catalog.
 
@@ -503,6 +511,7 @@ PROVIDERS: dict[str, Callable[..., list[str]]] = {
     "mistral":    lambda env: fetch_mistral(env["MISTRAL_API_KEY"]),
     "cohere":     lambda env: fetch_cohere(env["COHERE_API_KEY"]),
     "poolside":   lambda env: fetch_poolside(env["POOLSIDE_API_KEY"]),
+    "hetzner":    lambda env: fetch_hetzner(env["HETZNER_VLLM_API_KEY"]),
     "zai":        lambda env: fetch_zai(env["ZAI_API_KEY"]),
     "opencode-zen": lambda env: fetch_opencode_zen(env["OPENCODE_ZEN_API_KEY"]),
     "llm7io":     lambda env: fetch_llm7io(env.get("LLM7IO_API_KEY", "unused")),
@@ -521,6 +530,7 @@ _REQUIRED_ENV = {
     "mistral": ["MISTRAL_API_KEY"],
     "cohere": ["COHERE_API_KEY"],
     "poolside": ["POOLSIDE_API_KEY"],
+    "hetzner": ["HETZNER_VLLM_API_KEY"],
     "zai": ["ZAI_API_KEY"],
     "opencode-zen": ["OPENCODE_ZEN_API_KEY"],
     # llm7io/huggingface/ovhcloud: free tier without a required key
@@ -1937,6 +1947,9 @@ PROVIDER_DISPLAY = {
     "mistral": "Mistral",
     "cohere": "Cohere",
     "poolside": "Poolside",
+    "hetzner": "Hetzner",
+    "zai": "Z.AI",
+    "elevenlabs": "ElevenLabs",
     "opencode-zen": "OpenCode Zen",
     "llm7io": "LLM7.io",
     "huggingface": "HuggingFace",

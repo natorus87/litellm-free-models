@@ -10,7 +10,7 @@
 
 ## Short Description
 
-LiteLLM proxy that aggregates **exclusively free AI inference APIs** from 15 providers, with rate-limit-aware load balancing (`usage-based-routing-v2`), cooldowns, and fallback chains. The same chat models (e.g. `gpt-oss-120b`) are covered by multiple providers to work around rate limits; provider-specific aliases expose embeddings and audio transcription.
+LiteLLM proxy that aggregates **exclusively free AI inference APIs** from 16 providers, with rate-limit-aware load balancing (`usage-based-routing-v2`), cooldowns, and fallback chains. The same chat models (e.g. `gpt-oss-120b`) are covered by multiple providers to work around rate limits; provider-specific aliases expose embeddings and audio transcription.
 
 **Repo**: `/home/sb/github/litellm-free-models`
 
@@ -32,6 +32,7 @@ Client ──► LiteLLM Proxy (:4000)
               ├─► Mistral La Plateforme (2 RPM)
               ├─► Cohere (20 RPM)
               ├─► Poolside (10 RPM conservative preview budget)
+              ├─► Hetzner Experiments (5 RPM conservative best-effort budget)
               ├─► Z.AI (1 RPM conservative free-model budget)
               ├─► ElevenLabs (2 RPM conservative Scribe STT budget)
               ├─► OpenCode Zen (10 RPM)
@@ -50,7 +51,7 @@ Client ──► MASTER (:4000, own keys + slave routing)
               └─► Slave 2 (:4002, other API keys)
 ```
 
-Master (with the currently rendered provider set): 155 direct + 138 slave deployments = **293 deployments**. Slaves reuse the base `config.yaml` via a Docker volume mount.
+Master (with every provider key configured): 157 direct + 142 slave deployments = **299 deployments**. Slaves reuse the base `config.yaml` via a Docker volume mount.
 
 **Positioning (deliberate decision):** Multi-key deployments in ONE instance have the same 3× effect without the overhead. The master/slave setup is positioned only for **separate hosts/egress IPs** (IP-based limits like OVHcloud) — see the README section "Multi-Instance".
 
@@ -69,12 +70,13 @@ Master (with the currently rendered provider set): 155 direct + 138 slave deploy
 | 7 | [Mistral La Plateforme](https://console.mistral.ai) | mistral/ | `MISTRAL_API_KEY` | 2 |
 | 8 | [Cohere](https://cohere.com) | cohere/ | `COHERE_API_KEY` | 20 |
 | 9 | [Poolside](https://poolside.ai/models) | openai/ (api_base) | `POOLSIDE_API_KEY` | 10* |
-| 10 | [Z.AI](https://z.ai/) | zai/ | `ZAI_API_KEY` | 1* |
-| 11 | [ElevenLabs](https://elevenlabs.io/) | elevenlabs/ | `ELEVENLABS_API_KEY` | 2* |
-| 12 | [OpenCode Zen](https://opencode.ai/zen) | openai/ (api_base) | `OPENCODE_ZEN_API_KEY` | 10 |
-| 13 | [LLM7.io](https://llm7.io/) | openai/ (api_base) | `LLM7IO_API_KEY` | 40 |
-| 14 | [HuggingFace Inference API](https://huggingface.co/) | huggingface/ | `HF_TOKEN` | 30 |
-| 15 | [OVHcloud AI Endpoints](https://www.ovhcloud.com/en/public-cloud/ai-endpoints/) | openai/ (api_base) | (no key, anonymous free tier) | 2 |
+| 10 | [Hetzner Experiments](https://console.hetzner.com/) | openai/ (api_base) | `HETZNER_VLLM_API_KEY` | 5* |
+| 11 | [Z.AI](https://z.ai/) | zai/ | `ZAI_API_KEY` | 1* |
+| 12 | [ElevenLabs](https://elevenlabs.io/) | elevenlabs/ | `ELEVENLABS_API_KEY` | 2* |
+| 13 | [OpenCode Zen](https://opencode.ai/zen) | openai/ (api_base) | `OPENCODE_ZEN_API_KEY` | 10 |
+| 14 | [LLM7.io](https://llm7.io/) | openai/ (api_base) | `LLM7IO_API_KEY` | 40 |
+| 15 | [HuggingFace Inference API](https://huggingface.co/) | huggingface/ | `HF_TOKEN` | 30 |
+| 16 | [OVHcloud AI Endpoints](https://www.ovhcloud.com/en/public-cloud/ai-endpoints/) | openai/ (api_base) | (no key, anonymous free tier) | 2 |
 
 Full env-var list including `REDIS_*`/`POSTGRES_*`: see `.env.example` (that file is the reference; numbers here are no longer hand-maintained).
 
@@ -88,6 +90,7 @@ Full env-var list including `REDIS_*`/`POSTGRES_*`: see `.env.example` (that fil
 - **NVIDIA**: deployment name = `openai/openai/<model>` → sends `openai/<model>` to NVIDIA. Kimi runs under `moonshotai/kimi-k2-instruct` (different from `kimi-k2.6` on OpenRouter/Cloudflare).
 - **GitHub Models**: retired by GitHub on 2026-07-30 and removed after live tests returned HTTP 404/410. The local `GITHUB_TOKEN` is no longer consumed.
 - **Poolside**: OpenAI-compatible at `https://inference.poolside.ai/v1`; `poolside/laguna-s-2.1` is free for a limited time. Poolside does not publish preview limits, so the router uses a conservative 10 RPM / 200K TPM budget (`*`).
+- **Hetzner Experiments**: OpenAI-compatible at `https://inference.hetzner.com/api/v1`; free, best-effort, and explicitly without production SLA. Configured aliases are `qwen3.6-35b-a3b` (`Qwen/Qwen3.6-35B-A3B-FP8`) and multimodal `qwen3.8-27b` (`Qwen/Qwen3.8-27B`), both with 262,144-token context advertised by Hetzner. Limits are unpublished, so routing starts at 5 RPM / 200K TPM (`*`).
 - **Z.AI**: native LiteLLM `zai/` provider; free `glm-4.5-flash`, `glm-4.7-flash`, and vision-capable `glm-4.6v-flash`. The API omits these IDs from `/models` although they are callable. Limits are unpublished, so routing starts at 1 RPM / 100K TPM (`*`).
 - **ElevenLabs**: native LiteLLM `elevenlabs/` provider; `scribe_v2` is a second deployment behind `audio-transcription`. Free-plan TTS cannot use premade/library voices and is therefore not routed. Free output is noncommercial; published output requires attribution.
 - **OpenCode Zen**: endpoint `https://opencode.ai/zen/v1`, models: `deepseek-v4-flash-free`, `nemotron-3-ultra-free`, `big-pickle`, `north-mini-code-free`.
@@ -105,7 +108,7 @@ Full env-var list including `REDIS_*`/`POSTGRES_*`: see `.env.example` (that fil
 The matrix is **generated** (`python3 find-shared-models.py --write-docs`), not hand-maintained — CI checks for drift:
 
 <!-- BEGIN GENERATED MODEL MATRIX (python3 find-shared-models.py --write-docs) -->
-Snapshot (generated from `config.template.yaml`): **69 model_names, 155 base deployments**. `render-config.py` removes deployments from providers without an API key in `.env` — the effective count can therefore be lower.
+Snapshot (generated from `config.template.yaml`): **71 model_names, 157 base deployments**. `render-config.py` removes deployments from providers without an API key in `.env` — the effective count can therefore be lower.
 
 | model_name | Deployments | Provider |
 |---|---|---|
@@ -126,7 +129,7 @@ Snapshot (generated from `config.template.yaml`): **69 model_names, 155 base dep
 | `nemotron-3-nano-30b` | 3 | OpenRouter, NVIDIA, HuggingFace |
 | `nemotron-3-ultra` | 3 | OpenRouter, OpenCode Zen, NVIDIA |
 | `qwen3.6-27b` | 3 | Groq, HuggingFace, OVHcloud |
-| `audio-transcription` | 2 | Groq, elevenlabs |
+| `audio-transcription` | 2 | Groq, ElevenLabs |
 | `codestral-latest` | 2 | LLM7.io, Mistral |
 | `deepseek-r1-0528` | 2 | LLM7.io, HuggingFace |
 | `deepseek-v3` | 2 | LLM7.io, HuggingFace |
@@ -164,20 +167,22 @@ Snapshot (generated from `config.template.yaml`): **69 model_names, 155 base dep
 | `big-pickle` | 1 | OpenCode Zen |
 | `command-r-plus` | 1 | Cohere |
 | `dots-3-note-preview` | 1 | OpenRouter |
-| `elevenlabs-scribe-v2` | 1 | elevenlabs |
+| `elevenlabs-scribe-v2` | 1 | ElevenLabs |
 | `embedding-code` | 1 | Mistral |
 | `embedding-general` | 1 | Google AI Studio |
 | `embedding-liquid` | 1 | OpenRouter |
 | `embedding-multilingual` | 1 | Cohere |
 | `embedding-nvidia-text` | 1 | OpenRouter |
 | `embedding-nvidia-vl` | 1 | OpenRouter |
-| `glm-4.5-flash` | 1 | zai |
-| `glm-4.6v-flash` | 1 | zai |
-| `glm-4.7-flash` | 1 | zai |
+| `glm-4.5-flash` | 1 | Z.AI |
+| `glm-4.6v-flash` | 1 | Z.AI |
+| `glm-4.7-flash` | 1 | Z.AI |
 | `lfm-2.5-2.6b` | 1 | OpenRouter |
 | `mistral-large` | 1 | Mistral |
 | `openrouter-free` | 1 | OpenRouter |
 | `qwen3-next-80b-a3b` | 1 | HuggingFace |
+| `qwen3.6-35b-a3b` | 1 | Hetzner |
+| `qwen3.8-27b` | 1 | Hetzner |
 <!-- END GENERATED MODEL MATRIX -->
 
 **Note on `gemma-3-12b-it`**: removed in June 2026 (Google retired the gemma-3 series; no free provider offers it anymore). Replacement: `gemma-4-26b-a4b-it` and `gemma-4-31b-it`.
@@ -186,7 +191,7 @@ Snapshot (generated from `config.template.yaml`): **69 model_names, 155 base dep
 
 ### Multi-Instance (additional)
 
-Master config (with the currently rendered provider set): 155 base + 138 slave = **293 deployments**. Each slave reuses the rendered 155-deployment base config with its own keys → effectively 3× rate limit per provider.
+Master config (with every provider key configured): 157 base + 142 slave = **299 deployments**. Each slave reuses the rendered base config with its own keys → effectively 3× rate limit per provider.
 
 ---
 
@@ -253,7 +258,7 @@ The authoritative source is `config.template.yaml` (`router_settings.fallbacks` 
 │       ├── service.yaml
 │       └── secret.yaml.template
 │
-├── tests/                       # 125 unit tests (unittest, stdlib-only)
+├── tests/                       # 127 unit tests (unittest, stdlib-only)
 │   └── test_config_invariants.py  # fallback isolation, chat ≥2-provider rule, tpm/rpm location, Redis markers
 │
 ├── .github/workflows/
@@ -294,7 +299,7 @@ docker compose up -d
 ## 7. Status & Known Limitations
 
 ### Completed (as of 2026-08-19)
-- ✅ 15 providers integrated, 69 model_names / 155 rendered deployments
+- ✅ 16 providers integrated, 71 model_names / 157 template deployments
 - ✅ Redis cache + auth cache, **conditionally rendered** (without REDIS_HOST → Redis-free)
 - ✅ `usage-based-routing-v2` with Redis tracking; tpm/rpm in litellm_params
 - ✅ Password flow: no more committed defaults; Compose enforces passwords (`:?`),
@@ -323,7 +328,7 @@ docker compose up -d
 
 ## 8. Key Decisions
 
-1. **Provider prefixes**: `openrouter/`, `cerebras/`, `groq/`, `cloudflare/`, `gemini/`, `zai/`, and `elevenlabs/` — routed automatically by LiteLLM. `openai/` for NVIDIA, Poolside, OpenCode Zen, LLM7.io, and OVHcloud, each with its own `api_base`.
+1. **Provider prefixes**: `openrouter/`, `cerebras/`, `groq/`, `cloudflare/`, `gemini/`, `zai/`, and `elevenlabs/` — routed automatically by LiteLLM. `openai/` for NVIDIA, Poolside, Hetzner, OpenCode Zen, LLM7.io, and OVHcloud, each with its own `api_base`.
 2. **No PyYAML**: all generators/tests parse YAML line-based (stdlib-only).
 3. **Slave config via volume mount**: slaves reference `../config.yaml`; only the master config gets generated.
 4. **Reverse-proxy providers rejected**: Pollinations.ai, UncloseAI, G4F.dev (legality/reliability).
@@ -387,7 +392,7 @@ kubectl apply -k k8s/           # K8s variant (uses ../../k8s/redis as a base)
 
 `find-shared-models.py`:
 
-1. **Live query** of 14 model catalogs via `.env` keys (`providers-overlap.txt`) — **in parallel** (ThreadPool, <2s instead of sequential) with **retry/backoff** on 429/5xx/network errors. OVHcloud/LLM7/HF also work without a key. ElevenLabs audio entitlement is validated separately because `/v1/models` does not list Scribe STT.
+1. **Live query** of 15 model catalogs via `.env` keys (`providers-overlap.txt`) — **in parallel** (ThreadPool, <2s instead of sequential) with **retry/backoff** on 429/5xx/network errors. OVHcloud/LLM7/HF also work without a key. ElevenLabs audio entitlement is validated separately because `/v1/models` does not list Scribe STT.
 2. **Free-tier filter**: OpenRouter combines its chat and embedding catalogs and only returns `:free`/zero-priced models (embedding/rerank IDs are excluded from chat auto-apply); Google AI only keeps `generateContent`-capable models; Cohere only chat-capable model names; HuggingFace comes live from the Inference Router (`router.huggingface.co/v1/models`) instead of a hardcoded list (fallback list → provider gets marked "partial" and excluded from the stale check). Cloudflare is queried via `/ai/models/search` (paginated).
 3. **Grouping** by normalized model names, filtered to ≥ 2 providers.
 4. **Cost comparison** (hypothetical paid-tier price) from the LiteLLM reference DB, 24h cache under `.cache/litellm-prices.json`.

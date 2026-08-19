@@ -53,6 +53,7 @@ jobs:
           MISTRAL_API_KEY: ${{ secrets.SYNC_MISTRAL_API_KEY }}
           COHERE_API_KEY: ${{ secrets.SYNC_COHERE_API_KEY }}
           POOLSIDE_API_KEY: ${{ secrets.SYNC_POOLSIDE_API_KEY }}
+          HETZNER_VLLM_API_KEY: ${{ secrets.SYNC_HETZNER_VLLM_API_KEY }}
           ZAI_API_KEY: ${{ secrets.SYNC_ZAI_API_KEY }}
           ELEVENLABS_API_KEY: ${{ secrets.SYNC_ELEVENLABS_API_KEY }}
           OPENCODE_ZEN_API_KEY: ${{ secrets.SYNC_OPENCODE_ZEN_API_KEY }}
@@ -74,6 +75,7 @@ jobs:
             [ -n "$MISTRAL_API_KEY" ]      && echo "MISTRAL_API_KEY=$MISTRAL_API_KEY"
             [ -n "$COHERE_API_KEY" ]       && echo "COHERE_API_KEY=$COHERE_API_KEY"
             [ -n "$POOLSIDE_API_KEY" ]     && echo "POOLSIDE_API_KEY=$POOLSIDE_API_KEY"
+            [ -n "$HETZNER_VLLM_API_KEY" ] && echo "HETZNER_VLLM_API_KEY=$HETZNER_VLLM_API_KEY"
             [ -n "$ZAI_API_KEY" ]          && echo "ZAI_API_KEY=$ZAI_API_KEY"
             [ -n "$ELEVENLABS_API_KEY" ]   && echo "ELEVENLABS_API_KEY=$ELEVENLABS_API_KEY"
             [ -n "$OPENCODE_ZEN_API_KEY" ] && echo "OPENCODE_ZEN_API_KEY=$OPENCODE_ZEN_API_KEY"

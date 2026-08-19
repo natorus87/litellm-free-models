@@ -31,6 +31,7 @@ Which API keys are set? (names are enough — **never post values!**)
 - [ ] `MISTRAL_API_KEY`
 - [ ] `COHERE_API_KEY`
 - [ ] `POOLSIDE_API_KEY`
+- [ ] `HETZNER_VLLM_API_KEY`
 - [ ] `ZAI_API_KEY`
 - [ ] `ELEVENLABS_API_KEY`
 - [ ] `OPENCODE_ZEN_API_KEY`

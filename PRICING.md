@@ -1,10 +1,10 @@
 # PRICING.md — LiteLLM Free-Models Proxy Cost Information
 
-> **As of: 2026-08-19** — 15 providers (incl. Z.AI Flash, ElevenLabs Scribe v2, Poolside's limited-time preview, and OVHcloud anonymous free tier; GitHub Models retired 2026-07-30).
+> **As of: 2026-08-19** — 16 providers (incl. Hetzner Experiments, Z.AI Flash, ElevenLabs Scribe v2, Poolside's limited-time preview, and OVHcloud anonymous free tier; GitHub Models retired 2026-07-30).
 > Pricing data from `model_prices_and_context_window.json`
 > (LiteLLM reference DB, identical to `https://models.litellm.ai/`).
 
-This document provides pricing information for the 15 free-tier AI API providers used by the LiteLLM Free-Models Proxy. Token prices are in USD per 1 million tokens unless otherwise noted.
+This document provides pricing information for the 16 free-tier AI API providers used by the LiteLLM Free-Models Proxy. Token prices are in USD per 1 million tokens unless otherwise noted.
 
 Prices are based on public information as of June 2026 and are subject to change. Always check the provider's official website for the most current pricing.
 
@@ -23,6 +23,7 @@ Prices are based on public information as of June 2026 and are subject to change
 | **Mistral La Plateforme** | ✅ Yes           | $0.15 - $2.00              | $0.15 - $6.00               | Free tier, Mistral Small: $0.20/$0.60, Mistral Large: $2.00/$6.00                       |
 | **Cohere**             | ✅ Yes               | $0.0375 - $2.50            | $0.15 - $10.00              | Free trial keys, Command R: $0.15/$0.60, Command R+: $2.50/$10.00                      |
 | **Poolside**           | ✅ Limited preview   | Not published              | Not published               | Laguna S 2.1 is free for a limited time; reference value is estimated separately        |
+| **Hetzner Experiments** | ✅ Experimental     | $0.00                      | $0.00                       | Free best-effort Qwen inference without billing or SLA; limits unpublished               |
 | **Z.AI**               | ✅ Yes               | $0.00                      | $0.00                       | GLM-4.5/4.7 Flash and GLM-4.6V Flash are zero-priced; limits unpublished                 |
 | **ElevenLabs**         | ✅ Yes               | n/a                        | n/a                         | Renewable Free audio quota; Scribe v2 STT routed, noncommercial Free output              |
 | **OpenCode Zen**       | ✅ Yes               | $0.00 - $0.30              | $0.00 - $1.20               | Several free models, paid models: $0.05-0.30/$0.40-1.20 (cheaper tier)                  |

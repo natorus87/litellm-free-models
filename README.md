@@ -2,9 +2,9 @@
   <img src="assets/banner.svg" alt="litellm-free-models — one OpenAI-compatible endpoint, 15 free AI APIs, zero cost" width="100%">
 </p>
 
-A [LiteLLM](https://github.com/BerriAI/litellm) proxy that aggregates **exclusively free AI inference APIs** from 15 providers — with automatic load balancing, cooldown, and fallback chains. The same chat model (e.g. `gpt-oss-120b`) is covered by multiple providers to bypass individual free-tier rate limits; provider-specific aliases also expose embeddings and audio transcription.
+A [LiteLLM](https://github.com/BerriAI/litellm) proxy that aggregates **exclusively free AI inference APIs** from 16 providers — with automatic load balancing, cooldown, and fallback chains. The same chat model (e.g. `gpt-oss-120b`) is covered by multiple providers to bypass individual free-tier rate limits; provider-specific aliases also expose embeddings and audio transcription.
 
-![Tests](https://img.shields.io/badge/tests-125_passing-brightgreen)
+![Tests](https://img.shields.io/badge/tests-127_passing-brightgreen)
 ![License](https://img.shields.io/badge/license-MIT-blue)
 ![Python](https://img.shields.io/badge/python-3.10%2B-blue)
 ![LiteLLM](https://img.shields.io/badge/litellm-proxy-orange)
@@ -36,7 +36,7 @@ A [LiteLLM](https://github.com/BerriAI/litellm) proxy that aggregates **exclusiv
 
 ## ✨ Features
 
-- **15 providers, 69 model aliases** — including Z.AI Flash, ElevenLabs Scribe v2, and three free OpenRouter embeddings.
+- **16 providers, 71 model aliases** — including Hetzner Experiments Qwen 3.6/3.8, Z.AI Flash, ElevenLabs Scribe v2, and three free OpenRouter embeddings.
 - **Rate-limit-aware load balancing** — `usage-based-routing-v2` routes to deployments that still have `tpm`/`rpm` budget (a 1-RPM OpenRouter deployment no longer receives as much traffic as a 40-RPM NVIDIA one). With Redis, usage and cooldowns are tracked **across all instances/replicas**.
 - **Fail-fast fallback chains** — each model has a prioritized list of fallbacks (e.g. `gpt-oss-120b` → `gpt-oss-20b` → `llama-3.3-70b-instruct`). Load-tested GPT-OSS, Llama 3.3 70B, and Gemma 4 31B pools use a 20s per-attempt ceiling; embeddings use 15s, speech 60s, and transcription 120s. One retry and a 60s cooldown prevent stalled free backends from consuming the client's full deadline without breaking long media jobs.
 - **Shared Redis cache** — response cache (5 min TTL, see [Response Cache](#-response-cache)) + virtual-key auth cache across replicas. Fully optional: without `REDIS_HOST` the config renders Redis-free.
@@ -44,7 +44,7 @@ A [LiteLLM](https://github.com/BerriAI/litellm) proxy that aggregates **exclusiv
 - **Complete savings sheet** — [MODEL_PRICING.md](MODEL_PRICING.md) gives every configured alias an official, LiteLLM-database, or clearly marked estimated reference price without corrupting real `$0` spend tracking.
 - **Multi-instance setup** — Master + 2 Slaves in `multi-instance/` triple the effective rate limits (for separate hosts/IPs, see [Multi-Instance](#-multi-instance)).
 - **Template pipeline** — `config.template.yaml` is the single source of truth; `render-config.py` renders `config.yaml` from it with `{{ENV_VAR}}` substitution, provider filtering, and fallback-target validation.
-- **125 unit tests** — including structural invariant tests (fallback targets must exist, chat models follow the ≥ 2-provider rule, embeddings cannot cross-fallback).
+- **127 unit tests** — including structural invariant tests (fallback targets must exist, chat models follow the ≥ 2-provider rule, embeddings cannot cross-fallback).
 
 ---
 
@@ -124,7 +124,7 @@ Response: JSON object with `choices[0].message.content` (OpenAI-compatible forma
                   ┌─────────────────────────────────────────┐
                   │       LiteLLM Proxy (:4000 internal)    │
                   │     Routing: usage-based-routing-v2     │
-   Client ──────► │     69 model_names, 155 deployments      │
+   Client ──────► │     71 model_names, 157 deployments      │
    (Port 4444)   │     Cooldown 60s, Retries 1             │
                   └────────────┬────────────────────────────┘
                                │
@@ -133,7 +133,7 @@ Response: JSON object with `choices[0].message.content` (OpenAI-compatible forma
    OpenRouter  Cerebras     Groq      Cloudflare   NVIDIA  OVHcloud
    (1 RPM)     (30 RPM)  (2-30 RPM)  (10 RPM)   (40 RPM)  (2 RPM)
                                                           (no key!)
-        +  Google AI, Mistral, Cohere, Poolside, Z.AI,
+        +  Google AI, Mistral, Cohere, Poolside, Hetzner, Z.AI,
            ElevenLabs, OpenCode Zen, LLM7.io, HuggingFace
 ```
 
@@ -144,7 +144,7 @@ In the [`multi-instance/`](multi-instance/README.md) directory an additional mas
 ```
                   ┌──────────────────────────────────┐
                   │   MASTER (:4000, own keys)       │
-   Client ──────► │  155 direct + 138 slave backends │
+   Client ──────► │  157 direct + 142 slave backends │
                   └──────────────┬───────────────────┘
                                  │
                 ┌────────────────┼────────────────┐
@@ -196,7 +196,7 @@ the displayed values are conservative local routing budgets, not provider claims
 ## 🤖 Models
 
 <!-- BEGIN GENERATED MODEL MATRIX (python3 find-shared-models.py --write-docs) -->
-Snapshot (generated from `config.template.yaml`): **69 model_names, 155 base deployments**. `render-config.py` removes deployments from providers without an API key in `.env` — the effective count can therefore be lower.
+Snapshot (generated from `config.template.yaml`): **71 model_names, 157 base deployments**. `render-config.py` removes deployments from providers without an API key in `.env` — the effective count can therefore be lower.
 
 | model_name | Deployments | Provider |
 |---|---|---|
@@ -217,7 +217,7 @@ Snapshot (generated from `config.template.yaml`): **69 model_names, 155 base dep
 | `nemotron-3-nano-30b` | 3 | OpenRouter, NVIDIA, HuggingFace |
 | `nemotron-3-ultra` | 3 | OpenRouter, OpenCode Zen, NVIDIA |
 | `qwen3.6-27b` | 3 | Groq, HuggingFace, OVHcloud |
-| `audio-transcription` | 2 | Groq, elevenlabs |
+| `audio-transcription` | 2 | Groq, ElevenLabs |
 | `codestral-latest` | 2 | LLM7.io, Mistral |
 | `deepseek-r1-0528` | 2 | LLM7.io, HuggingFace |
 | `deepseek-v3` | 2 | LLM7.io, HuggingFace |
@@ -255,20 +255,22 @@ Snapshot (generated from `config.template.yaml`): **69 model_names, 155 base dep
 | `big-pickle` | 1 | OpenCode Zen |
 | `command-r-plus` | 1 | Cohere |
 | `dots-3-note-preview` | 1 | OpenRouter |
-| `elevenlabs-scribe-v2` | 1 | elevenlabs |
+| `elevenlabs-scribe-v2` | 1 | ElevenLabs |
 | `embedding-code` | 1 | Mistral |
 | `embedding-general` | 1 | Google AI Studio |
 | `embedding-liquid` | 1 | OpenRouter |
 | `embedding-multilingual` | 1 | Cohere |
 | `embedding-nvidia-text` | 1 | OpenRouter |
 | `embedding-nvidia-vl` | 1 | OpenRouter |
-| `glm-4.5-flash` | 1 | zai |
-| `glm-4.6v-flash` | 1 | zai |
-| `glm-4.7-flash` | 1 | zai |
+| `glm-4.5-flash` | 1 | Z.AI |
+| `glm-4.6v-flash` | 1 | Z.AI |
+| `glm-4.7-flash` | 1 | Z.AI |
 | `lfm-2.5-2.6b` | 1 | OpenRouter |
 | `mistral-large` | 1 | Mistral |
 | `openrouter-free` | 1 | OpenRouter |
 | `qwen3-next-80b-a3b` | 1 | HuggingFace |
+| `qwen3.6-35b-a3b` | 1 | Hetzner |
+| `qwen3.8-27b` | 1 | Hetzner |
 <!-- END GENERATED MODEL MATRIX -->
 
 The table above is **generated** from `config.template.yaml` via `python3 find-shared-models.py --write-docs` — do not edit it by hand (CI checks for drift).
@@ -468,7 +470,7 @@ Recommendations for operating the proxy (nothing is force-enabled by default):
 ## 🧪 Tests
 
 ```bash
-make test                # 125 unit tests, ~1s
+make test                # 127 unit tests, ~1s
 ```
 
 The suite covers five modules:
@@ -502,7 +504,7 @@ The tests use only the Python standard library (`unittest`).
 | `make docker-build` / `make docker-run`                  | Build / run the custom image (standalone, without Redis) |
 | `make backup-db` / `make restore-db`                     | Dump / restore the Compose Postgres DB (`./backups/`)  |
 | `make opencode-config`                                   | Create/update the `litellm` provider in `~/.config/opencode/opencode.json` from live models |
-| `make test`                                              | Run 125 unit tests                                      |
+| `make test`                                              | Run 127 unit tests                                      |
 | `make lint` / `make format`                              | Run ruff linter / formatter                            |
 | `make clean`                                             | Remove generated/temporary files (backups, reports)    |
 | `make install-dev`                                       | Install dev dependencies and pre-commit hooks          |
@@ -561,7 +563,7 @@ More detailed docs on `find-shared-models.py` and output formats: [`AGENTS.md`](
 
 The [`multi-instance/`](multi-instance/README.md) directory contains a complete master/slave setup:
 
-- **Master** with 293 deployments (155 direct + 138 slave backends for the currently rendered provider set)
+- **Master** with up to 299 deployments (157 direct + 142 slave backends when all provider keys are configured)
 - **2 Slaves** with 99 deployments each under different API keys
 - Provider API keys per instance (`master/.env`, `slave1/.env`, `slave2/.env`); shared Redis/Postgres passwords in the project-level `multi-instance/.env`
 - Dedicated docker-compose and Kubernetes manifests (`multi-instance/k8s/`)

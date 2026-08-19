@@ -61,6 +61,8 @@ PROVIDER_KEYS: list[tuple[str, str, str, str]] = [
      "Trial key: 1000 calls/month."),
     ("POOLSIDE_API_KEY", "Poolside", "https://platform.poolside.ai",
      "Laguna S 2.1 preview: free for a limited time."),
+    ("HETZNER_VLLM_API_KEY", "Hetzner Experiments Inference",
+     "https://console.hetzner.com/", "Free best-effort OpenAI-compatible inference."),
     ("ZAI_API_KEY", "Z.AI", "https://z.ai/manage-apikey/apikey-list",
      "Three zero-price Flash models; unpublished limits, routed conservatively."),
     ("ELEVENLABS_API_KEY", "ElevenLabs",

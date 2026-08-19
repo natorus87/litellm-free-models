@@ -29,15 +29,15 @@ Extends the [main setup](../README.md) to **3 independent LiteLLM instances** th
 ```
 
 **Master** (multi-instance/master/config.yaml):
-- **155 direct deployments** using the master's currently rendered API keys
-- **138 slave deployments** (69 model aliases × 2 slaves) that send HTTP requests to `slave1:4000` / `slave2:4000`
-- → **293 deployments** total with the currently rendered provider set
+- Up to **157 direct deployments** when every provider key is configured
+- Up to **142 slave deployments** (71 model aliases × 2 slaves) that send HTTP requests to `slave1:4000` / `slave2:4000`
+- → Up to **299 deployments** total
 
 **Each slave** (uses the base `config.yaml`):
 - Runs with **its own API keys** (different accounts than the master and the other slaves)
 - Proxies the request to the real providers (OpenRouter, Groq, etc.)
 
-**Routing**: The master routes via `usage-based-routing-v2` across all 293 currently rendered deployments — deployments with remaining `tpm`/`rpm` budget are preferred; usage is tracked cross-instance (including shared cooldowns) via the shared Redis. Once the direct deployments are exhausted, the master routes to a slave — which has its own keys and its own rate limits. Embedding and audio aliases only fan out to the same alias on slaves and never enter the chat fallback chains.
+**Routing**: The master routes via `usage-based-routing-v2` across all currently rendered deployments — deployments with remaining `tpm`/`rpm` budget are preferred; usage is tracked cross-instance (including shared cooldowns) via the shared Redis. Once the direct deployments are exhausted, the master routes to a slave — which has its own keys and its own rate limits. Embedding and audio aliases only fan out to the same alias on slaves and never enter the chat fallback chains.
 
 ## Effect
 
@@ -146,7 +146,7 @@ multi-instance/k8s/
 ├── namespace.yaml              # Namespace: litellm-free-models
 ├── kustomization.yaml          # Kustomize – all resources at once
 ├── master/
-│   ├── configmap.yaml          # Generated (currently 293 deployments)
+│   ├── configmap.yaml          # Generated (up to 299 deployments)
 │   ├── deployment.yaml         # Master pod
 │   └── service.yaml            # ClusterIP: litellm-master
 ├── slave/
@@ -237,7 +237,7 @@ Slaves don't need to be restarted — they use the base `config.yaml` via a volu
 multi-instance/
 ├── .env.example              # Project .env: Redis/Postgres passwords (Compose interpolation)
 ├── master/
-│   ├── config.yaml           # Docker config (currently 155 base + 138 slave = 293)
+│   ├── config.yaml           # Docker config (up to 157 base + 142 slave = 299)
 │   └── .env.example          # Master keys + SLAVE1/2_API_KEY
 ├── slave1/
 │   └── .env.example          # Slave-1 keys (different accounts)
